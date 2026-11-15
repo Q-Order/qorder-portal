@@ -7,6 +7,7 @@ import { GoodsLine, VatLine } from './CartTotals';
 import type { Checkout } from './useCheckout';
 import { chosenCarrier } from './carrier';
 import { paymentPlan } from './paymentPlan';
+import { useDeliveryOptions } from './DeliveryBlock';
 
 /**
  * Расчёт заявки строками: товары, НДС, доставка, грузчики и их налог.
@@ -17,8 +18,11 @@ export function CheckoutBreakdown({ checkout, details }: { checkout: Checkout; d
   const currency = useSupplierCurrency();
   const { cart, lines, totals } = checkout;
   const { shipping, direct, loaders, vatRate, deliveryVat, loadersVat } = totals;
+  // Самовывоз — строкой «Самовывоз», а не «Доставка — по договорённости» (замечание владельца 2026-11-15).
+  const pickup = useReceiveWay(checkout) === 'PICKUP';
   return (
-    <div id="checkout-breakdown" className={cn('flex flex-col gap-2 border-t border-hairline pt-3.5', !details && 'max-lg:hidden')}>
+    // Черта отделяет итог от названий и наличия над ним; первым в карточке (телефон, шаг «Отправить») — без черты.
+    <div id="checkout-breakdown" className={cn('flex flex-col gap-2 border-t border-hairline pt-3.5 first:border-t-0 first:pt-0', !details && 'max-lg:hidden')}>
       {/* Пустая корзина — без «Товары, 0 позиций · 0 тенге» и без НДС: нулевые строки читаются как посчитанное. */}
       {cart && lines.length > 0 && <GoodsLine cart={cart} />}
       {/*
@@ -28,9 +32,11 @@ export function CheckoutBreakdown({ checkout, details }: { checkout: Checkout; d
       */}
       {cart && lines.length > 0 && <VatLine cart={cart} />}
       <div className="flex justify-between gap-2 text-body text-ink-muted">
-        <span>{t('checkout.summary.delivery')}</span>
+        <span>{t(pickup ? 'checkout.delivery.pickup' : 'checkout.summary.delivery')}</span>
         <span data-testid="delivery-total" className="tabular-nums text-ink">
-          {direct
+          {pickup
+            ? (shipping ? money(shipping, currency) : t('checkout.steps.free'))
+            : direct
             ? (shipping === undefined
               ? t('checkout.delivery.carrierTariff')
               : t('checkout.summary.deliveryInfo', { amount: money(shipping, currency) }))
@@ -149,4 +155,12 @@ function ServiceVat({ testId, vat, rate, label, currency }: {
       {t('checkout.summary.vatInside', { amount: money(vat.vat, currency) })}
     </p>
   );
+}
+
+/** Как клиент получит заявку: самовывоз, доставка или ещё не выбрано. */
+export function useReceiveWay(checkout: Checkout): 'PICKUP' | 'DELIVERY' | undefined {
+  const options = useDeliveryOptions();
+  const method = options?.methods.find((candidate) => candidate.id === checkout.delivery.methodId);
+  if (options?.mode === 'PICKUP_ONLY' || method?.pickup || (!method && checkout.delivery.pickupPointId)) return 'PICKUP';
+  return method ? 'DELIVERY' : undefined;
 }

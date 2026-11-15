@@ -35,10 +35,12 @@ export function answerExpectedText(iso: string, t: TFunction): string {
 /**
  * Штуки оптовой строки: « · 60 мешков», а у снятой с продажи позиции,
  * единица штук которой уже неизвестна, — « · по 50». У штучной строки пусто.
+ * Число и единица не разрываются переносом («40 / шт.» на узком телефоне).
  */
 export function packNote(line: SnapshotLineDto, t: TFunction): string {
   if (!line.packQty) return '';
-  return ` · ${line.pieceUnit
+  const pieces = line.pieceUnit
     ? quantityWithUnit(line.quantity * line.packQty, line.pieceUnit)
-    : t('cart.wholesale.pack', { amount: line.packQty })}`;
+    : t('cart.wholesale.pack', { amount: line.packQty });
+  return ` · ${pieces.replace(/ /g, '\u00a0')}`;
 }

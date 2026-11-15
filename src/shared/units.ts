@@ -59,6 +59,19 @@ export function quantityWithUnit(amount: number, unit: string): string {
 }
 
 /**
+ * «от 1 упаковки», «от 5 упаковок» — порог ступени опта (просьба владельца 2026-11-15: «1 упаковка
+ * и больше» на узком экране ломалось по слову в строку). После «от» — родительный падеж: у знакомых
+ * единиц он совпадает со второй и третьей формой (1 — «упаковки», 5 — «упаковок»). Незнакомая единица
+ * и не русский язык — пусто: вызывающий пишет прежнее «N и больше».
+ */
+export function fromQuantity(amount: number, unit: string): string | undefined {
+  const forms = currentLanguage() === 'ru' ? FORMS[unit.trim().toLowerCase()] : undefined;
+  if (!forms) return undefined;
+  const one = Number.isInteger(amount) && amount % 10 === 1 && amount % 100 !== 11;
+  return `от ${decimal(amount)} ${one || !Number.isInteger(amount) ? forms[1] : forms[2]}`;
+}
+
+/**
  * Единица рядом с числом, стоящим отдельно, — в поле количества: «20» и
  * «мешков в корзине». Знакомая склоняется по числу, как в `quantityWithUnit`;
  * незнакомая и сокращённая — как `unitLabel`.

@@ -45,6 +45,8 @@ describe('оформление по шагам на телефоне', () => {
     await userEvent.click(screen.getByRole('button', { name: /дальше/i }));
     expect(screen.getByRole('heading', { name: 'Проверьте заявку' })).toBeInTheDocument();
     expect(current()).toHaveTextContent('Отправить');
+    // «Только самовывоз» — способ выбран магазином, а не «не выбрано»; показано, что именно.
+    expect(screen.getByText('Как получите').nextElementSibling).toHaveTextContent(/^Самовывоз$/);
     expect(screen.getByTestId('total')).toHaveTextContent('12 500');
 
     await userEvent.click(screen.getByRole('button', { name: 'Изменить' }));
@@ -58,6 +60,34 @@ describe('оформление по шагам на телефоне', () => {
       expect(JSON.parse(String(submit?.init?.body))).toEqual({ note: 'позвоните за час', credit: false });
     });
     expect(await screen.findByText(/заявка отправлена/i)).toBeInTheDocument();
+  });
+
+  it('ушла розничная заявка — ниже кнопка к оптовой, что осталась в корзине', async () => {
+    const retail = { ...cart.lines[0], mode: 'RETAIL' };
+    const wholesale = { ...cart.lines[0], itemId: 'item-2', name: 'Носки', mode: 'WHOLESALE', total: 30000 };
+    const both = { ...cart, lines: [retail, wholesale], total: 42500 };
+    const left = { ...cart, lines: [wholesale], total: 30000 };
+    const cartRule = get('/api/portal/cart', both);
+    localStorage.setItem('qo.orderMode.supplier-1', 'RETAIL');
+    stubFetch([
+      get('/api/portal/cart/part', { ...cart, lines: [retail] }),
+      cartRule,
+      get('/api/portal/delivery', pickupOnly),
+      { match: (url, init) => {
+        const hit = url.includes('/api/portal/orders') && init?.method === 'POST';
+        if (hit) cartRule.body = left;
+        return hit;
+      }, body: { draftId: 'draft-1', revision: 1, total: 12500 } },
+    ]);
+    renderScreen(<CheckoutPage />);
+
+    await userEvent.click(await screen.findByRole('button', { name: /дальше/i }));
+    await userEvent.click(screen.getByRole('button', { name: /дальше/i }));
+    await userEvent.click(screen.getByRole('button', { name: /отправить заявку/i }));
+
+    expect(await screen.findByText(/заявка отправлена/i)).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Оформить оптовую заявку · позиций: 1' })).toBeInTheDocument();
+    localStorage.removeItem('qo.orderMode.supplier-1');
   });
 
   it('«Как получить» — два экрана: где и когда, затем грузчики; без них — сразу к отправке', async () => {

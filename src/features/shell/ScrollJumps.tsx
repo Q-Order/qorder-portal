@@ -58,9 +58,10 @@ export function ScrollJumps({ content }: { content: RefObject<HTMLElement | null
       {far.top ? (
         <button type="button" aria-label={t('shell.scrollUp')} title={t('shell.scrollUp')}
           // На телефоне — над нижним меню, как подсказки оболочки, а при корзине — над ней (`CartBar`).
-          // Панель покупки карточки на телефоне занимает это место — стрелка уступает.
+          // Панель покупки карточки и низ оформления (итог, «Дальше») на телефоне занимают это место — стрелка уступает.
+          // Выше нижнего меню на 2rem (просьба владельца 2026-11-14): вплотную к меню закрывала правый край строк.
           // Справа и на телефоне (просьба владельца 2026-11-06; с 2026-10-30 стояла слева — справа она могла закрыть корзину на снимке товара).
-          className={cn(ROUND, '[body:has([data-purchase-bar])_&]:max-lg:hidden bottom-[calc(6rem+env(safe-area-inset-bottom))] [body:has([data-cart-bar])_&]:bottom-[calc(9.25rem+env(safe-area-inset-bottom))] lg:bottom-8 lg:[body:has([data-cart-bar])_&]:bottom-8')}
+          className={cn(ROUND, '[body:has([data-purchase-bar])_&]:max-lg:hidden [body:has([data-checkout])_&]:max-lg:hidden bottom-[calc(8rem+env(safe-area-inset-bottom))] [body:has([data-cart-bar])_&]:bottom-[calc(11.25rem+env(safe-area-inset-bottom))] lg:bottom-8 lg:[body:has([data-cart-bar])_&]:bottom-8')}
           onClick={() => jump(0)}>
           <ArrowUp aria-hidden="true" className="size-6" />
         </button>

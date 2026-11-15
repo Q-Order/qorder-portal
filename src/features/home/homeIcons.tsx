@@ -1,4 +1,5 @@
 import { forwardRef } from 'react';
+import { cn } from '../../ui/cn';
 import type { IconComponent, IconProps } from '../../ui/icons';
 
 /*
@@ -35,3 +36,48 @@ export const HomeDelivery = bold(`<path fill="currentColor" d="m255.14 115.54l-1
 
 export const HomeRepeat = bold(`<path fill="currentColor" d="M228 128a100 100 0 0 1-98.66 100H128a99.4 99.4 0 0 1-68.62-27.29a12 12 0 0 1 16.48-17.45a76 76 0 1 0-1.57-109c-.13.13-.25.25-.39.37L54.89 92H72a12 12 0 0 1 0 24H24a12 12 0 0 1-12-12V56a12 12 0 0 1 24 0v20.72l21.48-19.66A100 100 0 0 1 228 128"/>`);
 
+
+/**
+ * «Каталог товаров» на «Главной» — витрина магазина (рисунок владельца 2026-11-13,
+ * temp/catalog-vitrina.svg): контур, а не заливка Phosphor. Цвет — `currentColor`, как у соседних
+ * плиток (`text-home-icon`), чтобы и тёмная тема, и тон плитки оставались общими.
+ */
+export const HomeShowcase = forwardRef<SVGSVGElement, IconProps>(function HomeShowcase({ size = 24, strokeWidth: _, className, ...props }, ref) {
+  return (
+    <svg ref={ref} xmlns='http://www.w3.org/2000/svg' width={size} height={size} viewBox='1.6 -0.4 52.8 52.8' fill='none'
+      stroke='currentColor' strokeWidth={TILE_LINE} strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'
+      className={cn(SAME_LINE, className)} {...props}>
+      <rect x='2' y='4' width='52' height='44' rx='4' />
+      <path d='M2 13h52M9 8.5h.1m5 0h.1m5 0h.1M42 21h6m-6 6h4m-4 6h6m-6 6h4' />
+      <path d='M9 21h10l1 7H8zM12 21v-1a2 2 0 0 1 4 0v1' />
+      <path d='M28 18h4v3l2 2v5h-8v-5l2-2z' />
+      <rect x='9' y='33' width='11' height='9' rx='1' />
+      <path d='M14.5 33v3m12-3 2-1 1.5 2h2l1.5-2 2 1 2 3-3 2v4h-7v-4l-3-2z' />
+    </svg>
+  );
+});
+
+/*
+ * Значки плиток «Главной» — одной толщины линии (просьба владельца 2026-11-15): контуром, как витрина
+ * выше, и линия задана в пикселях экрана (`non-scaling-stroke`), а не в долях рисунка, — у плитки 44 px
+ * на телефоне и 56 px на мониторе она одна и та же. Жирные Phosphor давали 4–5 px против 1,6 px витрины.
+ * Рисунки — Lucide (ISC). Нижнее меню остаётся на Phosphor (`HomeMessages` и соседи).
+ * Размер — по «Мои заявки» (просьба владельца 2026-11-15): рисунок в высоту 5/6 плитки; поле вокруг
+ * остальных обрезано в `viewBox`, иначе круг и витрина выходили мельче планшета.
+ */
+const TILE_LINE = 2;
+const SAME_LINE = '[&_*]:[vector-effect:non-scaling-stroke]';
+
+function line(body: string, viewBox = '0 0 24 24'): IconComponent {
+  return forwardRef<SVGSVGElement, IconProps>(function TileLine({ size = 24, strokeWidth: _, className, ...props }, ref) {
+    return (
+      <svg ref={ref} xmlns='http://www.w3.org/2000/svg' width={size} height={size} viewBox={viewBox} fill='none'
+        stroke='currentColor' strokeWidth={TILE_LINE} strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'
+        className={cn(SAME_LINE, className)} {...props} dangerouslySetInnerHTML={{ __html: body }} />
+    );
+  });
+}
+
+export const TileOrders = line('<rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2M12 11h4M12 16h4M8 11h.01M8 16h.01"/>');
+export const TileRepeat = line('<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>', '1.2 1.2 21.6 21.6');
+export const TileAsk = line('<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M8 10h8M8 14h5"/>', '0.1 1.1 22.8 22.8');

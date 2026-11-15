@@ -1,3 +1,4 @@
+import { positionCount } from '../../cart/cartPart';
 import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, NavLink } from 'react-router-dom';
@@ -37,7 +38,8 @@ export function ClientBar({ activated, ready, others, onOpenShops, current }: {
   const name = profile.data?.status === 200 ? profile.data.data.customerName : undefined;
   const notifications = useGetPortalNotifications({ query: { enabled: ready } });
   const unread = messageCounts(notifications.data?.status === 200 ? notifications.data.data : []).total;
-  const lines = cartOf(useCart(ready).data)?.lines.length ?? 0;
+  // Линейка одежды — одна позиция, а не столько, сколько в ней размеров (2026-11-14).
+  const lines = positionCount(cartOf(useCart(ready).data)?.lines);
   const drawer = useCartDrawer();
   const on = (...paths: string[]) => paths.some((path) => current === path || current.startsWith(`${path}/`));
   const wrap = useRef<HTMLDivElement>(null);
@@ -67,7 +69,7 @@ export function ClientBar({ activated, ready, others, onOpenShops, current }: {
             Только если подписи не влезают в место между магазином и профилем — остаются значки. */}
         <div ref={wrap} className="flex min-w-0 flex-1 justify-center">
         <nav aria-label={t('shell.sectionsRail')} className={cn('flex items-center gap-1 py-2.5', compact ? 'px-0' : 'px-1.5')}>
-          <Item compact={compact} to="/home" icon={HomeHouse} label={t('shell.tabs.home')} tip={t('shell.tips.home')} active={on('/home', '/orders')} />
+          <Item compact={compact} to="/home" icon={HomeHouse} label={t('shell.tabs.home')} tip={t('shell.tips.home')} active={on('/home')} />
           <Item compact={compact} to="/catalog" icon={HomeCatalog} label={t('shell.tabs.catalog')} tip={t('shell.tips.catalog')} active={on('/catalog')} />
           <Item compact={compact} to="/messages" icon={HomeMessages} label={t('shell.tabs.messages')} tip={t('shell.tips.messages')} count={unread}
             countLabel={t('shell.unread', { count: unread })} active={on('/messages', '/questions', '/reviews')} />

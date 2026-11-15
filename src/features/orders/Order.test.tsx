@@ -75,6 +75,36 @@ describe('заявка на пересогласовании', () => {
     expect(await screen.findByTestId('order-sale-mode')).toHaveTextContent('Оптовая заявка');
   });
 
+  it('оптовая строка: цена сразу за упаковками, штуки в конце', async () => {
+    stubFetch([get('/api/portal/orders/order-1', {
+      ...renegotiated, state: 'SUBMITTED', needsAnswer: false, proposed: undefined, diff: undefined, proposedTotal: undefined,
+      submitted: [{ name: 'Носки', quantity: 4, unit: 'упаковка', price: 30000, amount: 120000, packQty: 10, pieceUnit: 'шт' }],
+    })]);
+
+    openOrder();
+
+    // «4 упаковки · 40 шт. × 30 000 ₸» читалось бы как 40 штук по 30 000.
+    expect(await screen.findByText(/4 упаковки × 30\s000 ₸ · 40 шт\./)).toBeInTheDocument();
+  });
+
+  it('строка по распродаже — с зачёркнутой прежней ценой, без скидки — без неё', async () => {
+    stubFetch([get('/api/portal/orders/order-1', {
+      ...renegotiated, state: 'SUBMITTED', needsAnswer: false, proposed: undefined, diff: undefined, proposedTotal: undefined,
+      submitted: [
+        { name: 'Ремень', quantity: 2, unit: 'шт', price: 7200, listPrice: 9000, amount: 14400 },
+        { name: 'Шарф', quantity: 1, unit: 'шт', price: 24000, amount: 24000 },
+      ],
+    })]);
+
+    openOrder();
+
+    const old = await screen.findByTestId('order-line-old-price');
+    expect(old.tagName).toBe('S');
+    expect(old).toHaveTextContent('9 000 ₸');
+    expect(old.parentElement).toHaveTextContent(/2 шт\. × 9\s000 ₸ 7\s200 ₸/);
+    expect(screen.getAllByTestId('order-line-old-price')).toHaveLength(1);
+  });
+
   it('называет, кто ведёт заявку, — именем', async () => {
     stubFetch([get('/api/portal/orders/order-1', { ...renegotiated, managerName: 'Жанар' })]);
 

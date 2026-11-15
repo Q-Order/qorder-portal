@@ -1,3 +1,4 @@
+import { useEffect, useSyncExternalStore } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGetPortalCatalogCounts, type GetPortalCatalogChannel, type ShowcaseCounts } from '../../api/generated';
 import { useOrderMode } from '../cart/orderMode';
@@ -16,7 +17,9 @@ export function useShopChannel() {
   const wholesaleModels = (shop?.wholesale ?? 0) + (shop?.both ?? 0);
   const retailModels = (shop?.retail ?? 0) + (shop?.both ?? 0);
   const twoWays = wholesaleModels > 0 && retailModels > 0;
-  const channel: GetPortalCatalogChannel | undefined = !twoWays ? undefined
+  // Магазин только с оптом — тоже «опт»: ничего не отсекает, но «Акция» берёт оптовую распродажу.
+  const channel: GetPortalCatalogChannel | undefined = !twoWays
+    ? (wholesaleModels > 0 && retailModels === 0 ? 'ANY_WHOLESALE' : undefined)
     : orderMode === 'WHOLESALE' ? 'ANY_WHOLESALE' : 'ANY_RETAIL';
   return { shop, orderMode, setOrderMode, wholesaleModels, retailModels, twoWays, channel };
 }
@@ -63,7 +66,9 @@ export function isCounts(value: unknown): value is ShowcaseCounts {
  */
 export function HeaderOrderMode() {
   const { t } = useTranslation();
-  const { orderMode, setOrderMode, twoWays } = useShopChannel();
+  const { orderMode: chosen, setOrderMode, twoWays } = useShopChannel();
+  const locked = useLockedMode();
+  const orderMode = locked ?? chosen;
   // Числа — как в каталоге по умолчанию: только в наличии и тем же отбором способа (просьба владельца 2026-11-06).
   // Сумма «розница + оба» дважды считала модель, у которой одни размеры только в розницу, а другие и оптом.
   // Показывать ли переключатель, решают все товары: закончившийся опт не отменяет способ.
@@ -76,8 +81,10 @@ export function HeaderOrderMode() {
     <div role="radiogroup" aria-label={t('catalog.orderMode.label')} className="flex h-11 shrink-0 items-center gap-0.5 rounded-xl bg-sunk p-1">
       {(['WHOLESALE', 'RETAIL'] as const).map((mode) => (
         <button key={mode} type="button" role="radio" aria-checked={orderMode === mode} onClick={() => setOrderMode(mode)}
+          disabled={!!locked && locked !== mode}
+          title={locked && locked !== mode ? t(`catalog.orderMode.only.${locked}`) : undefined}
           className={cn(
-            'qo-hit flex h-9 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-lg border-0 px-3 text-sm font-bold',
+            'qo-hit flex h-9 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 items-center gap-1.5 whitespace-nowrap rounded-lg border-0 px-3 text-sm font-bold',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
             orderMode === mode ? 'bg-surface font-extrabold text-ink shadow-[2px_3px_6px_rgba(58,48,30,.07)]' : 'bg-transparent text-ink-muted hover:text-ink',
           )}>
@@ -87,6 +94,30 @@ export function HeaderOrderMode() {
       ))}
     </div>
   );
+}
+
+/*
+ * Способ открытой карточки товара одного способа (только опт или только розница): шапка показывает его
+ * выбранным, а другой — недоступным; выбор клиента в каталоге не трогается (решение владельца 2026-11-14).
+ */
+let cardOnly: SaleMode | undefined;
+const listeners = new Set<() => void>();
+const subscribe = (listener: () => void) => { listeners.add(listener); return () => { listeners.delete(listener); }; };
+
+/** Карточка объявляет свой единственный способ, пока открыта; `undefined` — продаётся обоими. */
+export function useLockOrderMode(only: SaleMode | undefined) {
+  useEffect(() => {
+    cardOnly = only;
+    listeners.forEach((listener) => listener());
+    return () => {
+      cardOnly = undefined;
+      listeners.forEach((listener) => listener());
+    };
+  }, [only]);
+}
+
+function useLockedMode() {
+  return useSyncExternalStore(subscribe, () => cardOnly, () => undefined);
 }
 
 /** Сколько моделей в наличии видно в каталоге этим способом. */

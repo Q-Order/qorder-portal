@@ -1,3 +1,4 @@
+import { positionCount } from '../cart/cartPart';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -43,7 +44,7 @@ export function FirstSteps({ active }: { active: boolean }) {
 
   if (!active || hidden || cart.isPending || orders.isPending) return null;
   const list = orders.data?.status === 200 ? orders.data.data : [];
-  const lines = cartOf(cart.data)?.lines.length ?? 0;
+  const lines = positionCount(cartOf(cart.data)?.lines);
   const sent = list.length > 0;
   const answered = list.some((order) => !WAITING.has(order.state ?? ''));
   if (answered) return null;

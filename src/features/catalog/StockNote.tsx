@@ -15,12 +15,15 @@ export function StockNote({
   available,
   short = false,
   needed,
+  amount,
   className,
 }: {
   stock?: string;
   available?: number | null;
   /** Сколько нужно клиенту (строка корзины): меньше свободного — число не зелёное, а «уточняется». */
   needed?: number;
+  /** Число словами с единицей — «2 линейки», «6 шт.»; пусто — голое число. */
+  amount?: string;
   /**
    * Коротко — «Уточняется», как в макете витрины: в карточке каталога строка
    * стоит под ценой рядом с датой, и «наличие» там понятно без слова.
@@ -37,7 +40,7 @@ export function StockNote({
   if (available !== undefined && available !== null) {
     return (
       <StockLine tone={available <= 0 ? 'subtle' : available >= (needed ?? 0) ? 'in-stock' : 'unclear'} className={className}>
-        {t('catalog.stock.available', { amount: decimal(available) })}
+        {t('catalog.stock.available', { amount: amount ?? decimal(available) })}
       </StockLine>
     );
   }

@@ -11,7 +11,7 @@ import {
 import type { SaleMode } from './ModeSwitch';
 import { useOrderMode } from './orderMode';
 import { toPieces } from './wholesale';
-import { cartOf, useCart, useSetCartLine } from './useCart';
+import { cartOf, useCart, useSetCartLine, useWholesaleLines } from './useCart';
 import { firstQuantity } from './saleTerms';
 import { announceAdded } from './cartDrawer';
 import { Button } from '../../ui/Button';
@@ -29,7 +29,7 @@ import { cn } from '../../ui/cn';
  * в корзине), и повторять вопрос на каждой бутылке — значит приучить
  * отвечать «да» не читая.
  */
-type Pending = { name: string; resolve: (adult: boolean) => void } | null;
+type Pending = { name: string; age: number; resolve: (adult: boolean) => void } | null;
 
 let pending: Pending = null;
 const listeners = new Set<() => void>();
@@ -45,9 +45,9 @@ function subscribe(listener: () => void) {
 }
 
 /** Спросить возраст: ответ приходит обещанием — «да» только после записи на сервере. */
-function askAge(name: string): Promise<boolean> {
+function askAge(name: string, age: number): Promise<boolean> {
   pending?.resolve(false);
-  return new Promise((resolve) => set({ name, resolve }));
+  return new Promise((resolve) => set({ name, age, resolve }));
 }
 
 /** Окно вопроса. Рисуется один раз — в оболочке. */
@@ -72,7 +72,8 @@ export function AgeGateDialog() {
       asked.resolve(false);
       return;
     }
-    confirm.mutate(undefined, {
+    // Сервер помнит подтверждённый возраст: «18» не открывает товары 21+.
+    confirm.mutate({ params: { age: asked.age } }, {
       onSuccess: (response) => {
         set(null);
         asked.resolve(response.status === 200);
@@ -99,17 +100,17 @@ export function AgeGateDialog() {
             aria-hidden="true"
             className="flex size-14 items-center justify-center rounded-full bg-adult text-lg font-extrabold text-white"
           >
-            21+
+            {current?.age ?? 21}+
           </span>
           <Dialog.Title className="text-title font-extrabold lg:text-display tracking-[-0.02em] text-ink">
-            {t('catalog.age.title')}
+            {t('catalog.age.title', { count: current?.age ?? 21 })}
           </Dialog.Title>
           <p id="age-gate-text" className="text-base leading-normal text-ink-muted">
-            {t('catalog.age.text', { name: current?.name ?? '' })}
+            {t('catalog.age.text', { name: current?.name ?? '', count: current?.age ?? 21 })}
           </p>
           <div className="flex flex-col gap-2">
             <Button size="lg" variant="accent" disabled={confirm.isPending} onClick={() => answer(true)}>
-              {t('catalog.age.yes')}
+              {t('catalog.age.yes', { count: current?.age ?? 21 })}
             </Button>
             <Button size="lg" variant="outline" disabled={confirm.isPending} onClick={() => answer(false)}>
               {t('catalog.age.no')}
@@ -130,6 +131,7 @@ export function AgeGateDialog() {
 export function useAddToCart() {
   const cart = cartOf(useCart().data);
   const setLine = useSetCartLine();
+  const lines = useWholesaleLines();
   // Товар «оптом и в розницу» ложится в ту заявку, в которой клиент сейчас («Оптом / В розницу»).
   const [orderMode] = useOrderMode();
 
@@ -138,11 +140,21 @@ export function useAddToCart() {
     quantity?: number,
     mode?: SaleMode,
   ) {
-    if (item.terms?.ageRestricted && !cart?.ageConfirmed) {
-      const adult = await askAge(item.name);
+    // Спрашиваем, если подтверждённого возраста не хватает: подтвердивший 18 для 21+ отвечает ещё раз.
+    const age = item.terms?.minAge ?? 21;
+    if (item.terms?.ageRestricted && (cart?.confirmedAge ?? (cart?.ageConfirmed ? 21 : 0)) < age) {
+      const adult = await askAge(item.name, age);
       if (!adult) return false;
     }
     const chosen = mode ?? (item.wholesale?.retail ? orderMode : undefined);
+    // Одежда оптом — линейкой размеров, а не штуками (решение владельца 2026-11-14): первая ступень линеек.
+    if (item.wholesale?.linePieces && (chosen === 'WHOLESALE' || !item.wholesale.retail)) {
+      lines.mutate(
+        { itemId: item.id, data: { lines: quantity ?? item.wholesale.tiers[0]?.from ?? 1 } },
+        { onSuccess: (response) => { if (response.status === 200) announceAdded(item.name); } },
+      );
+      return true;
+    }
     // В оптовую заявку товар «оптом и в розницу» ложится сразу первой ступенью опта, а не штукой.
     const pieces = quantity === undefined && chosen === 'WHOLESALE' && item.wholesale
       ? item.wholesale.packQty * (item.wholesale.tiers[0]?.from ?? 1)
@@ -156,5 +168,5 @@ export function useAddToCart() {
     return true;
   }
 
-  return { add, isPending: setLine.isPending };
+  return { add, isPending: setLine.isPending || lines.isPending };
 }

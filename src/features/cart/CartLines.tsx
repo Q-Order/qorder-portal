@@ -9,7 +9,9 @@ import { Link } from 'react-router-dom';
 import { LineThumb } from './LineThumb';
 import { closeCart } from './cartDrawer';
 import { QuantityField } from './QuantityField';
-import { lineKey, lineMode, useCartPart } from './cartPart';
+import { cartRows, lineKey, lineMode, useCartPart } from './cartPart';
+import { LineGroupRow, LineGroupSummary } from './CartLineGroup';
+import { useWholesaleLines } from './useCart';
 import { money } from '../../shared/format';
 import { useSupplierCurrency } from '../../supplier/SupplierCurrency';
 import type { Currency } from '../../shared/currency';
@@ -51,7 +53,19 @@ export function CartLines({ editable = true, withSkipped = true, className }: Ca
   const { cart, shown, pick } = useCartPart();
   const setLine = useSetCartLine();
   const lines = (editable ? shown : cart)?.lines ?? [];
-  const pickedCount = lines.filter((line) => !pick.off.has(lineKey(line))).length;
+  // Размеры линейки одежды — одной строкой: и в списке, и в счёте «выбрано N из M».
+  const rows = cartRows(lines);
+  const keysOf = (row: (typeof rows)[number]) => (row.kind === 'one' ? [lineKey(row.line)] : row.rows.map(lineKey));
+  const isPicked = (row: (typeof rows)[number]) => keysOf(row).every((key) => !pick.off.has(key));
+  const pickedCount = rows.filter(isPicked).length;
+  const setLines = useWholesaleLines();
+  // Галочка линейки снимает и ставит все её размеры разом: в заявку уходит линейка, а не часть размеров.
+  function pickRow(row: (typeof rows)[number]) {
+    const keys = keysOf(row);
+    const off = new Set(pick.off);
+    if (isPicked(row)) keys.forEach((key) => off.add(key)); else keys.forEach((key) => off.delete(key));
+    pick.set([...off]);
+  }
   const skipped = cart?.skipped ?? [];
   // Строки, которые уже схлопываются: запрос уходит, когда строка ушла
   // с глаз, — иначе всё, что ниже, прыгало бы вверх одним рывком.
@@ -68,7 +82,7 @@ export function CartLines({ editable = true, withSkipped = true, className }: Ca
     setTimeout(() => setLine.mutate({ itemId: line.itemId, data: { quantity: 0, mode: line.mode } }, {
       onSuccess: (response) => {
         if (response.status !== 200) return;
-        setRemoved({ itemId: line.itemId, name: line.name, quantity: line.quantity, mode: line.mode });
+        setRemoved({ itemId: line.itemId, name: named(line), quantity: line.quantity, mode: line.mode });
         clearTimeout(undoTimer.current);
         undoTimer.current = setTimeout(() => setRemoved(null), 6000);
       },
@@ -123,20 +137,28 @@ export function CartLines({ editable = true, withSkipped = true, className }: Ca
         */
         <div className="flex flex-col">
           {/* Не всё положенное заказывают сейчас: в заявку уходят отмеченные, остальное ждёт в корзине. */}
-          {lines.length > 1 && (
+          {rows.length > 1 && (
             <label className="flex min-h-11 cursor-pointer items-center gap-3 border-b border-hairline text-sm font-semibold text-ink">
               <input
                 type="checkbox"
                 className="size-5 shrink-0 cursor-pointer accent-[var(--color-accent)]"
-                checked={pickedCount === lines.length}
-                ref={(box) => { if (box) box.indeterminate = pickedCount > 0 && pickedCount < lines.length; }}
-                onChange={() => pick.set(pickedCount === lines.length ? lines.map(lineKey) : [])}
+                checked={pickedCount === rows.length}
+                ref={(box) => { if (box) box.indeterminate = pickedCount > 0 && pickedCount < rows.length; }}
+                onChange={() => pick.set(pickedCount === rows.length ? lines.map(lineKey) : [])}
               />
               <span className="flex-1">{t('cart.pickAll')}</span>
-              <span className="text-caption font-medium text-ink-muted">{t('cart.picked', { picked: pickedCount, total: lines.length })}</span>
+              <span className="text-caption font-medium text-ink-muted">{t('cart.picked', { picked: pickedCount, total: rows.length })}</span>
             </label>
           )}
-          {lines.map((line) => {
+          {rows.map((row) => {
+            if (row.kind === 'line') {
+              return (
+                <LineGroupRow key={row.key} rows={row.rows} currency={currency} picked={isPicked(row)}
+                  onPick={() => pickRow(row)} removing={setLines.isPending}
+                  onRemove={() => setLines.mutate({ itemId: row.rows[0].itemId, data: { lines: 0 } })} />
+              );
+            }
+            const line = row.line;
             const going = leaving.includes(line.itemId);
             return (
             <div
@@ -151,7 +173,7 @@ export function CartLines({ editable = true, withSkipped = true, className }: Ca
             <div className={cn('flex gap-3.5 py-4 transition-opacity duration-150', pick.off.has(lineKey(line)) && 'opacity-55')}>
               <input
                 type="checkbox"
-                aria-label={t('cart.pickLine', { name: line.name })}
+                aria-label={t('cart.pickLine', { name: named(line) })}
                 className="mt-7 size-5 shrink-0 cursor-pointer accent-[var(--color-accent)]"
                 checked={!pick.off.has(lineKey(line))}
                 onChange={() => pick.toggle(lineKey(line))}
@@ -174,7 +196,7 @@ export function CartLines({ editable = true, withSkipped = true, className }: Ca
                   */}
                   <button
                     type="button"
-                    aria-label={t('cart.removeLine', { name: line.name })}
+                    aria-label={t('cart.removeLine', { name: named(line) })}
                     disabled={setLine.isPending || going}
                     onClick={() => remove(line)}
                     className={cn(
@@ -227,30 +249,33 @@ export function CartLines({ editable = true, withSkipped = true, className }: Ca
         // Сверочный список стоит внутри сводки заявки — без своей карточки:
         // рамка в рамке читалась бы вложенным окном.
         <div className="flex flex-col">
-          {lines.map((line) => (
-            <div
-              key={`${line.itemId}:${line.mode ?? ''}`}
-              data-testid="cart-line"
-              className="flex items-center gap-3 border-b border-hairline py-3 last:border-b-0"
-            >
-              <Link to={itemHref(line)} onClick={closeCart} tabIndex={-1} aria-hidden="true" className="shrink-0">
-                <LineThumb seed={line.itemId} src={line.imageUrl} className="size-12" />
-              </Link>
-              <div className="min-w-0 flex-1 break-words">
-                <p className="text-body font-semibold leading-[1.3] text-ink"><ItemLink line={line} /></p>
-                <PriceLine line={line} editable={false} currency={currency} />
-                {line.pack ? <PackContents label={t('pack.inPress')} members={packMembers(line.pack)} /> : null}
-              </div>
-              <p
-                data-testid="line-total"
-                className="shrink-0 text-body font-bold tabular-nums text-ink"
-              >
-                {money(line.total, currency)}
-              </p>
-            </div>
+          {rows.map((row) => row.kind === 'line' ? (
+            <LineGroupSummary key={row.key} rows={row.rows} currency={currency} />
+          ) : (
+            <SummaryLine key={lineKey(row.line)} line={row.line} currency={currency} />
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Строка в сводке оформления: количество — частью подписи, без поля со ступеньками. */
+function SummaryLine({ line, currency }: { line: CartLineDto; currency: Currency | undefined }) {
+  const { t } = useTranslation();
+  return (
+    <div data-testid="cart-line" className="flex items-center gap-3 border-b border-hairline py-3 last:border-b-0">
+      <Link to={itemHref(line)} onClick={closeCart} tabIndex={-1} aria-hidden="true" className="shrink-0">
+        <LineThumb seed={line.itemId} src={line.imageUrl} className="size-12" />
+      </Link>
+      <div className="min-w-0 flex-1 break-words">
+        <p className="text-body font-semibold leading-[1.3] text-ink"><ItemLink line={line} /></p>
+        <PriceLine line={line} editable={false} currency={currency} />
+        {line.pack ? <PackContents label={t('pack.inPress')} members={packMembers(line.pack)} /> : null}
+      </div>
+      <p data-testid="line-total" className="shrink-0 text-body font-bold tabular-nums text-ink">
+        {money(line.total, currency)}
+      </p>
     </div>
   );
 }
@@ -267,6 +292,9 @@ export function showsStock(line: CartLineDto): boolean {
 function itemHref(line: CartLineDto): string {
   return `/catalog/${encodeURIComponent(line.itemId)}`;
 }
+
+/** Имя строки с вариантом — «Куртка AZA01 · Чёрный · 52»: размеры одной модели в рознице иначе звучали одинаково. */
+const named = (line: CartLineDto) => (line.variantLabel ? `${line.name} · ${line.variantLabel}` : line.name);
 
 function ItemLink({ line }: { line: CartLineDto }) {
   return (
@@ -306,6 +334,9 @@ function PriceLine({ line, editable, currency }: { line: CartLineDto; editable: 
   // У смешанной строки могла измениться розница, цена упаковки или обе.
   const packWas = line.split?.packPriceAtAdding;
   return priceReallyChanged(line) ? (
+    <>
+    {/* Вариант и при новой цене: без него размеры одной модели — «Куртка AZA01» трижды (2026-11-15). */}
+    {line.variantLabel ? <p className="text-caption text-ink-muted">{line.variantLabel}</p> : null}
     <p className="text-caption font-medium text-unclear-ink">
       {line.priceAtAdding !== line.price || packWas === undefined
         ? t('cart.priceChanged', { was: money(line.priceAtAdding, currency), now: money(line.price, currency) })
@@ -316,6 +347,7 @@ function PriceLine({ line, editable, currency }: { line: CartLineDto; editable: 
         </span>
       ) : null}
     </p>
+    </>
   ) : (
     <>
       {/* В корзине — разбивкой по строчкам: опт синим, розница обычным, у каждой своя сумма. */}
@@ -466,8 +498,9 @@ function splitText(line: CartLineDto, split: CartSplitDto, currency: Currency | 
  * Молча пропущенная позиция обнаруживается уже при отгрузке: клиент считает,
  * что заказал набор, а приедет неполный.
  */
-export function SkippedNotice({ skipped }: { skipped: SkippedLineDto[] }) {
+export function SkippedNotice({ skipped, onTaken }: { skipped: SkippedLineDto[]; onTaken?: () => void }) {
   const { t } = useTranslation();
+  const setLines = useWholesaleLines();
 
   if (skipped.length === 0) return null;
 
@@ -478,9 +511,21 @@ export function SkippedNotice({ skipped }: { skipped: SkippedLineDto[] }) {
     >
       <p className="font-medium text-ink">{t('cart.notAdded')}</p>
       {skipped.map((line, index) => (
-        <p key={line.itemId ?? `typed-${index}`} className="text-sm text-ink">
-          {line.name} — {line.reason}
-        </p>
+        <div key={line.itemId ?? `typed-${index}`} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5">
+          <p className="m-0 text-sm text-ink">{line.name} — {line.reason}</p>
+          {/* Линейка не вошла, но полные есть — взять их одним нажатием, а не искать товар в каталоге (2026-11-15). */}
+          {line.itemId && line.takeLines ? (
+            <button type="button" disabled={setLines.isPending}
+              onClick={() => setLines.mutate({ itemId: line.itemId!, data: { lines: line.takeLines! } }, { onSuccess: (response) => { if (response.status === 200) onTaken?.(); } })}
+              className={cn(
+                'min-h-9 rounded-[var(--radius-control)] bg-surface px-3 text-sm font-bold text-accent-ink',
+                'shadow-[0_0_0_1px_var(--color-hairline)] transition-colors duration-200 hover:bg-accent-soft',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50',
+              )}>
+              {t('cart.lines.take', { count: line.takeLines })}
+            </button>
+          ) : null}
+        </div>
       ))}
       <p className="text-sm text-ink-subtle">{t('cart.chooseReplacement')}</p>
     </div>

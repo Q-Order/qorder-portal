@@ -12,9 +12,10 @@ import {
   Wallet,
   type IconComponent,
 } from '../../ui/icons';
-import { useGetPortalCatalogCounts, useGetPortalDebt, useGetPortalPromotions } from '../../api/generated';
+import { useGetPortalCatalogCounts, useGetPortalDebt } from '../../api/generated';
 import { NewArrivalsIcon } from '../arrivals/NewArrivalsIcon';
 import { promotionsOff } from '../promotions/promotionsOff';
+import { usePromotions } from '../promotions/usePromotions';
 
 /*
  * Разделы кабинета — одни на все раскладки: колонку, рейку, строку под
@@ -58,7 +59,7 @@ const MAIN_SECTIONS: Section[] = [
  * смотрят первым делом; кончились — пункт уходит, пустой раздел не зовёт.
  */
 export function useMainSections(enabled: boolean): { sections: Section[]; deals: number; arrivals: number } {
-  const promotions = useGetPortalPromotions({ query: { enabled } });
+  const promotions = usePromotions(enabled);
   const data = promotions.data?.status === 200 ? promotions.data.data : undefined;
   const hidden = data !== undefined && promotionsOff(data);
   // `{}`, а не `undefined`: тот же ключ кеша, что у главной и витрины, — один запрос вместо двух.

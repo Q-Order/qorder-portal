@@ -52,6 +52,13 @@ export function hasDeliveryExtras(method: DeliveryOptionsDto['methods'][number] 
 type Way = 'DELIVERY' | 'PICKUP';
 
 /**
+ * Способ доставки, названный продавцом «Самовывоз», — ошибка заведения: самовывоз заводится точкой.
+ * Под «Доставка» его не показываем, чтобы там была только доставка (просьба владельца 2026-11-15).
+ */
+const PICKUP_NAME = /самовывоз|өзі алып|pick-?up/i;
+export const isDelivery = (method: { pickup: boolean; name: string }) => !method.pickup && !PICKUP_NAME.test(method.name);
+
+/**
  * Условия доставки поставщика.
  *
  * Одним запросом на весь экран: блок выбора и итог смотрят на один и тот же
@@ -100,9 +107,13 @@ export function DeliveryBlock({ goodsTotal, value, onChange, lines = [], part = 
   // в ветке: спрашивать «какой из одного» незачем. У «только самовывоза»
   // считаются лишь способы самовывоза — доставку поставщик отключил.
   const offered = options
-    ? options.methods.filter((candidate) => options.mode !== 'PICKUP_ONLY' || candidate.pickup)
+    ? options.methods.filter((candidate) => (options.mode !== 'PICKUP_ONLY' || candidate.pickup) && (candidate.pickup || isDelivery(candidate)))
     : [];
-  const only = offered.length === 1 ? offered[0].id : undefined;
+  // Только если он из выбранной ветки: у продавца без способа самовывоза (одни точки) выбор «Самовывоз»
+  // обнулял способ, а этот выбор тут же ставил обратно доставку — на экране «Самовывоз» с адресом доставки,
+  // а дальше пустой шаг «Грузчики и перевозчик» (QA телефона 2026-11-15).
+  const fits = (candidate: { pickup: boolean }) => opened == null || (opened === 'PICKUP') === candidate.pickup;
+  const only = offered.length === 1 && fits(offered[0]) ? offered[0].id : undefined;
   const unchosen = !value.methodId;
   useEffect(() => {
     if (only && unchosen) onChange({ methodId: only });
@@ -133,7 +144,7 @@ export function DeliveryBlock({ goodsTotal, value, onChange, lines = [], part = 
   const nameOf = (id: string) =>
     supplierNames.find((candidate) => candidate.supplierId === id)?.name ?? id;
 
-  const shipped = options.methods.filter((candidate) => !candidate.pickup);
+  const shipped = options.methods.filter(isDelivery);
   const collected = options.methods.filter((candidate) => candidate.pickup);
   const method = options.methods.find((candidate) => candidate.id === value.methodId);
   const mapFirst = !manualAddress && !value.address && value.latitude == null;
@@ -586,7 +597,9 @@ function Chip({ name, checked, onSelect, children }: {
 }) {
   return (
     <label className={cn(
-      'flex min-h-14 min-w-[4.5rem] cursor-pointer items-center justify-center rounded-2xl border-[3px] border-solid px-3.5 text-center text-body font-extrabold leading-tight',
+      // `relative` — скрытая радиокнопка (sr-only, absolute) остаётся внутри чипа: иначе она выпадала из
+      // прокручиваемого ряда дней, и на 360 вся страница уезжала вбок до 446 точек (QA 2026-11-15).
+      'relative flex min-h-14 min-w-[4.5rem] cursor-pointer items-center justify-center rounded-2xl border-[3px] border-solid px-3.5 text-center text-body font-extrabold leading-tight',
       'focus-within:ring-2 focus-within:ring-accent',
       checked ? 'border-shop bg-shop text-on-shop' : 'border-line bg-surface text-ink',
     )}>

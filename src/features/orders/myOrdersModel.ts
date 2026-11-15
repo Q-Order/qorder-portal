@@ -116,6 +116,29 @@ export function matchesSearch(order: PortalOrderDto, query: string): boolean {
       .some((line) => line.name.toLocaleLowerCase().includes(needle));
 }
 
+/** Период отбора по дате оформления: дни `YYYY-MM-DD` включительно; пусто — без границы. */
+export interface Period { from?: string; to?: string }
+export type PeriodPreset = 'all' | 'today' | 'week' | 'month' | 'custom';
+
+/** День по часам клиента: заявка, оформленная в 00:30 по Алматы, — этого дня, а не вчерашнего по UTC. */
+export function localDay(date: Date): string {
+  const shift = date.getTimezoneOffset() * 60_000;
+  return new Date(date.getTime() - shift).toISOString().slice(0, 10);
+}
+
+/** Готовый период: «сегодня», «за 7 дней», «за 30 дней» — считая сегодняшний день. */
+export function presetPeriod(preset: Exclude<PeriodPreset, 'custom'>, now = new Date()): Period {
+  if (preset === 'all') return {};
+  const days = preset === 'today' ? 0 : preset === 'week' ? 6 : 29;
+  return { from: localDay(new Date(now.getTime() - days * 86_400_000)), to: localDay(now) };
+}
+
+/** Заявка оформлена в период (по дню оформления у клиента). */
+export function inPeriod(order: Pick<PortalOrderDto, 'createdAt'>, period: Period): boolean {
+  const day = localDay(new Date(order.createdAt));
+  return (!period.from || day >= period.from) && (!period.to || day <= period.to);
+}
+
 /**
  * Порядок списка: заявки с новым — наверх, внутри — по времени последнего сообщения:
  * за этим клиент сюда и пришёл.

@@ -141,6 +141,25 @@ describe('мои заявки', () => {
     expect(rowOf('1040')).toHaveTextContent('Принята');
   });
 
+  it('значок календаря: свои даты — только заявки за период, отборы считают внутри него; плашка сбрасывает', async () => {
+    openOrders();
+    await screen.findAllByTestId('order-row');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Отбор по датам' }));
+    const menu = screen.getByRole('dialog', { name: 'Заявки за период' });
+    await userEvent.click(within(menu).getByRole('radio', { name: 'Свои даты' }));
+    fireEvent.change(within(menu).getByLabelText('С'), { target: { value: '2026-09-03' } });
+    fireEvent.change(within(menu).getByLabelText('По'), { target: { value: '2026-09-04' } });
+    await userEvent.click(within(menu).getByRole('button', { name: 'Показать' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('order-row').map((row) => row.textContent?.match(/№(\d+)/)?.[1]).sort()).toEqual(['1043', '1046']);
+    expect(chip(/^Все/)).toHaveTextContent('2');
+
+    await userEvent.click(screen.getByTestId('period-chip'));
+    expect(chip(/^Все/)).toHaveTextContent('5');
+  });
+
   it('в заявке, ждущей ответа, — тот же ответ на изменения, что на экране заявки', async () => {
     openOrders();
     await screen.findAllByTestId('order-row');
@@ -750,5 +769,20 @@ describe('мои заявки на телефоне', () => {
     expect(within(screen.getByRole('region', { name: 'Остальные' })).getAllByTestId('order-row')).toHaveLength(3);
     // Раскрывать в списке нечего — всё на экране заявки.
     expect(screen.queryByRole('button', { name: /^Подробнее о заявке/ })).toBeNull();
+  });
+
+  it('значок фильтра открывает меню отборов слева: выбор — сразу в списке, меню закрывается', async () => {
+    openOrders();
+    await screen.findAllByTestId('order-row');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Отборы заявок' }));
+    const menu = await screen.findByRole('dialog', { name: 'Какие заявки показать' });
+    expect(within(menu).getByRole('radio', { name: /Нужен ваш ответ\s*1/ })).toBeInTheDocument();
+    await userEvent.click(within(menu).getByRole('radio', { name: /Нужен ваш ответ/ }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.getAllByTestId('order-row')).toHaveLength(1);
+    expect(within(screen.getByRole('group', { name: 'Какие заявки показать' }))
+      .getByRole('button', { name: /Нужен ваш ответ/ })).toHaveAttribute('aria-pressed', 'true');
   });
 });

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Route, Routes, useLocation } from 'react-router-dom';
+import { HeaderOrderMode } from './OrderModeSwitch';
 import { ItemCardPage } from './ItemCardPage';
 import { renderScreen } from '../../test/render';
 import { get, method, stubFetch, type StubbedResponse } from '../../test/http';
@@ -207,7 +208,22 @@ describe('карточка товара', () => {
   it('под названием — артикул цвета; без артикула строки нет', async () => {
     stubFetch(cardRules({ ...CARD, article: 'TS-BLK' }));
     renderCard();
-    expect(await screen.findByText('Арт. TS-BLK')).toBeInTheDocument();
+    expect(await screen.findByTestId('model-articles')).toHaveTextContent(/^Арт\. TS-BLK$/);
+  });
+
+  it('артикулы всех цветов модели: открытый первым, больше трёх — «Показать все»', async () => {
+    const colour = (itemId: string, value: string, article: string) => ({
+      itemId, price: 100, article, fields: [{ code: 'COLOR', name: 'Цвет', type: 'TEXT', value }],
+    });
+    stubFetch(cardRules({ ...CARD, article: 'AZA01-M', variants: [
+      colour('item-1', 'Мокко', 'AZA01-M'), colour('b', 'Чёрный', 'AZA01-BL'), colour('c', 'Коричневый', 'AZA01-BR'), colour('d', 'Синий', 'AZA01-BU'),
+    ] }));
+    renderCard();
+    const line = await screen.findByTestId('model-articles');
+    expect(line).toHaveTextContent(/^Арт\. AZA01-M, AZA01-BL, AZA01-BRПоказать все \(4\)$/);
+    await userEvent.click(within(line).getByRole('button', { name: 'Показать все (4)' }));
+    expect(line).toHaveTextContent('AZA01-BU');
+    expect(within(line).getByRole('button', { name: 'Свернуть' })).toBeInTheDocument();
   });
 
   it('показывает характеристики рубрики выше прочих свойств', async () => {
@@ -306,17 +322,174 @@ describe('карточка товара', () => {
     };
     const BOTH = { ...CARD, price: 100, wholesale: WHOLESALE };
 
-    it('товар одного способа: на чужом способе — предупреждение, на своём — нет', async () => {
+    it('одежда: состав линейки — только в «Оптом», в «В розницу» его нет', async () => {
+      const LINE = {
+        pieces: 3, linePrice: 300, piecePrice: 100,
+        sizes: [{ label: '48', quantity: 1, missing: false }, { label: '50', quantity: 2, missing: false }, { label: '52', quantity: 1, missing: true }],
+      };
+      stubFetch(cardRules({ ...BOTH, sizeGuide: 'CLOTHING', line: LINE }));
+      renderCard();
+
+      await screen.findByRole('button', { name: /^В розницу/ });
+      expect(screen.queryByTestId('card-line')).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: /^Оптом/ }));
+      const line = await screen.findByTestId('card-line');
+      expect(line).toHaveTextContent('48');
+      expect(line).toHaveTextContent('2 шт');
+      expect(line).toHaveTextContent(/Линейка 3 шт — 300/);
+      // Размера нет — зачёркнут и подписан «нет»: линейка уйдёт без него.
+      expect(within(line).getByText('52')).toHaveClass('line-through');
+      expect(line).toHaveTextContent('нет');
+    });
+
+    it('одежда оптом: состав линейки — таблицей RUS, INT, EUR и штук; незаполненное продавцом — прочерк', async () => {
+      const LINE = { pieces: 2, linePrice: 200, piecePrice: 100,
+        sizes: [{ label: '48', quantity: 1, missing: false }, { label: '50', quantity: 1, missing: true }] };
+      const CHART = { sizes: [{ code: 'RU48', label: '48', intl: 'M' }, { code: 'RU50', label: '50', intl: 'L' }],
+        rows: [{ measure: 'EUR', values: { RU48: '42' } }] };
+      stubFetch(cardRules({ ...BOTH, sizeGuide: 'CLOTHING', line: LINE, sizeChart: CHART }));
+      renderCard();
+
+      await userEvent.click(await screen.findByRole('button', { name: /^Оптом/ }));
+      const table = await screen.findByTestId('card-line-table');
+      expect(within(table).getAllByRole('columnheader').map((cell) => cell.textContent)).toEqual(['RUS', 'INT', 'EUR', 'В линейке']);
+      const [, first, second] = within(table).getAllByRole('row');
+      expect(first).toHaveTextContent(/48\s*M\s*42\s*1 шт/);
+      // У 50 EUR продавец не заполнил — прочерк; размера нет — зачёркнут и «нет».
+      expect(second).toHaveTextContent(/50\s*L\s*—\s*нет/);
+      expect(within(second).getByRole('rowheader')).toHaveClass('line-through');
+    });
+
+    it('одежда оптом: размеры буквами — RUS, INT, EUR по сетке модели; заполненное продавцом главнее', async () => {
+      const LINE = { pieces: 2, linePrice: 200, piecePrice: 100,
+        sizes: [{ label: 'XS', quantity: 1, missing: false }, { label: 'XL', quantity: 1, missing: false }] };
+      // Продавец вписал EUR только у XS — у XL EUR берётся по женской сетке (EUR = RUS − 6).
+      const CHART = { sizes: [{ code: 'XS', label: 'XS' }, { code: 'XL', label: 'XL' }], rows: [{ measure: 'EUR', values: { XS: '32' } }] };
+      stubFetch(cardRules({ ...BOTH, sizeGuide: 'CLOTHING', line: LINE, sizeChart: CHART, sizeGrid: 'WOMEN' }));
+      renderCard();
+
+      await userEvent.click(await screen.findByRole('button', { name: /^Оптом/ }));
+      const [, xs, xl] = within(await screen.findByTestId('card-line-table')).getAllByRole('row');
+      expect(xs).toHaveTextContent(/^40\s*XS\s*32\s*1 шт$/);
+      expect(xl).toHaveTextContent(/^52\s*XL\s*46\s*1 шт$/);
+    });
+
+    it('линейка: «Отдельные размеры — в розницу» — только у товара, который продаётся и в розницу', async () => {
+      const LINE = { pieces: 6, linePrice: 60000, piecePrice: 10000, sizes: [{ label: '48', quantity: 1, missing: false }] };
+      const wholesale = (retail: boolean) => ({
+        unit: 'линейка', packQty: 6, linePieces: 6, pieceUnit: 'шт', retail, tiers: [{ from: 1, price: 60000 }],
+      });
+      stubFetch(cardRules({ ...CARD, price: 12000, sizeGuide: 'CLOTHING', wholesale: wholesale(false), line: LINE }));
+      const { unmount } = renderCard();
+      expect(await screen.findByText('Оптом — только линейкой, все размеры сразу.')).toBeInTheDocument();
+      unmount();
+
+      stubFetch(cardRules({ ...CARD, price: 12000, sizeGuide: 'CLOTHING', wholesale: wholesale(true), line: LINE }));
+      renderCard();
+      await userEvent.click(await screen.findByRole('button', { name: /^Оптом/ }));
+      expect(await screen.findByText(/Отдельные размеры — в розницу/)).toBeInTheDocument();
+    });
+
+    it('одежда оптом: три варианта линеек с ценой штуки, ценой линейки и суммой; выбор меняет сумму кнопки', async () => {
+      // Розница 12 000 за шт; линейка 6 шт — 60 000, от 5 линеек — 54 000. Ступеней две — третьим встаёт «3 линейки».
+      const LINE_WHOLESALE = {
+        unit: 'линейка', packQty: 6, linePieces: 6, pieceUnit: 'шт', retail: true,
+        tiers: [{ from: 1, price: 60000 }, { from: 5, price: 54000 }],
+      };
+      const LINE = { pieces: 6, linePrice: 60000, piecePrice: 10000, sizes: [{ label: '48', quantity: 1, missing: false }] };
+      stubFetch(cardRules({ ...CARD, price: 12000, sizeGuide: 'CLOTHING', wholesale: LINE_WHOLESALE, line: LINE }));
+      renderCard();
+
+      await userEvent.click(await screen.findByRole('button', { name: /^Оптом/ }));
+      const tiers = await screen.findAllByTestId('line-tier');
+      // Каждый вариант — подписанными строками: штук всего, цена штуки, цена за все линейки, выгода; «Итого» в заголовке нет.
+      expect(screen.getByTestId('line-tiers')).not.toHaveTextContent('Итого');
+      expect(tiers[0]).toHaveTextContent(/1 линейка.*Штук всего\s*6 шт.*Цена за 1 шт\s*10\s000.*−17% к рознице.*Цена за 1 линейку\s*60\s000/);
+      expect(tiers[1]).toHaveTextContent(/3 линейки.*18 шт \(3 × 6\).*Цена за 3 линейки\s*180\s000/);
+      expect(tiers[1]).not.toHaveTextContent('Ваша выгода');
+      expect(tiers[2]).toHaveTextContent(/5 линеек.*30 шт \(5 × 6\).*9\s000.*−25% к рознице.*Цена за 5 линеек\s*270\s000.*Ваша выгода\s*30\s000/);
+      expect(screen.getByTestId('line-tiers')).toHaveTextContent('В одной линейке — 6 шт');
+      expect(tiers[0]).toHaveAttribute('aria-current', 'true');
+      expect(screen.getByTestId('line-tiers-next')).toHaveTextContent(/Ещё 4 линейки — и будет 9\s000 ₸ за шт/);
+
+      await userEvent.click(within(tiers[1]).getByRole('button'));
+      expect(screen.getAllByTestId('line-tier')[1]).toHaveAttribute('aria-current', 'true');
+      expect(screen.getByRole('button', { name: /В корзину линейкой/ })).toHaveTextContent(/180\s000/);
+    });
+
+    it('одежда оптом: только полные линейки — нет полной линейки, «В корзину» выключена; варианты сверх наличия выключены', async () => {
+      const LINE_WHOLESALE = {
+        unit: 'линейка', packQty: 6, linePieces: 6, pieceUnit: 'шт', retail: false,
+        tiers: [{ from: 1, price: 60000 }, { from: 5, price: 54000 }],
+      };
+      const line = (availableLines: number) => ({ pieces: 6, linePrice: 60000, piecePrice: 10000, availableLines,
+        sizes: [{ label: '48', quantity: 1, missing: availableLines === 0 }] });
+      stubFetch(cardRules({ ...CARD, price: 12000, sizeGuide: 'CLOTHING', wholesale: LINE_WHOLESALE, line: line(0) }));
+      const { unmount } = renderCard();
+      expect(await screen.findByTestId('line-available')).toHaveTextContent('Полной линейки нет в наличии');
+      expect(screen.getByRole('button', { name: /В корзину линейкой/ })).toBeDisabled();
+      // Ступень «от 5» не взять — подсказки «ещё 4 линейки — дешевле» нет.
+      expect(screen.queryByTestId('line-tiers-next')).not.toBeInTheDocument();
+      unmount();
+
+      stubFetch(cardRules({ ...CARD, price: 12000, sizeGuide: 'CLOTHING', wholesale: LINE_WHOLESALE, line: line(3) }));
+      const { unmount: unmount2 } = renderCard();
+      expect(await screen.findByTestId('line-available')).toHaveTextContent('Полных линеек в наличии: 3');
+      const tiers = screen.getAllByTestId('line-tier');
+      expect(within(tiers[1]).getByRole('button')).toBeEnabled();
+      expect(within(tiers[2]).getByRole('button')).toBeDisabled();
+      expect(screen.getByRole('button', { name: /В корзину линейкой/ })).toBeEnabled();
+      unmount2();
+
+      // Наличие меньше первой ступени: линейки есть, но минимум опта не набрать — так и сказано.
+      stubFetch(cardRules({ ...CARD, price: 12000, sizeGuide: 'CLOTHING', wholesale: { ...LINE_WHOLESALE, tiers: [{ from: 7, price: 60000 }] }, line: line(3) }));
+      renderCard();
+      expect(await screen.findByTestId('line-available')).toHaveTextContent('Полных линеек в наличии: 3, а оптом — от 7');
+      expect(screen.getByRole('button', { name: /В корзину линейкой/ })).toBeDisabled();
+    });
+
+    it('«Свободно» одежды: в «Оптом» — полными линейками, в «В розницу» — штуками размера', async () => {
+      const LINE_WHOLESALE = {
+        unit: 'линейка', packQty: 6, linePieces: 6, pieceUnit: 'шт', retail: true,
+        tiers: [{ from: 1, price: 60000 }],
+      };
+      const LINE = { pieces: 6, linePrice: 60000, piecePrice: 10000, availableLines: 2, sizes: [{ label: '48', quantity: 1, missing: false }] };
+      stubFetch(cardRules({ ...CARD, price: 12000, unit: 'шт', available: 6, sizeGuide: 'CLOTHING', wholesale: LINE_WHOLESALE, line: LINE }));
+      renderCard();
+
+      await userEvent.click(await screen.findByRole('button', { name: /^Оптом/ }));
+      expect(screen.getByTestId('stock-pill')).toHaveTextContent('Свободно: 2 линейки (12 шт.)');
+      await userEvent.click(screen.getByRole('button', { name: /^В розницу/ }));
+      expect(screen.getByTestId('stock-pill')).toHaveTextContent('Свободно: 6 шт.');
+    });
+
+    it('товар только в розницу в магазине обоих способов — без вкладок «Оптом» / «В розницу», сразу покупка', async () => {
       stubFetch([
         get('/api/portal/catalog/counts', { all: 2, sale: 0, novelty: 0, byCategory: {}, retail: 1, wholesale: 1, both: 0 }),
         ...cardRules(CARD),
       ]);
       renderCard();
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Оптом' }));
-      expect(screen.getByRole('status')).toHaveTextContent('Этот товар продаётся только в розницу');
-      await userEvent.click(screen.getByRole('button', { name: 'В розницу' }));
+      expect(await screen.findByRole('button', { name: /в корзину/i })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Оптом' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'В розницу' })).not.toBeInTheDocument();
       expect(screen.queryByText('Этот товар продаётся только в розницу')).not.toBeInTheDocument();
+    });
+
+    it('открытая карточка товара только в розницу блокирует «Оптом» в шапке', async () => {
+      stubFetch([
+        get('presence=ALL', { all: 2, sale: 0, novelty: 0, byCategory: {}, retail: 1, wholesale: 1, both: 0 }),
+        get('/api/portal/catalog/counts', { all: 1, sale: 0, novelty: 0, byCategory: {} }),
+        ...cardRules(CARD),
+      ]);
+      renderScreen(
+        <><HeaderOrderMode /><Routes><Route path="/catalog/:itemId" element={<ItemCardPage />} /></Routes></>,
+        { route: '/catalog/item-1' },
+      );
+      await screen.findByRole('button', { name: /в корзину/i });
+      const group = await screen.findByRole('radiogroup', { name: 'Как заказываете: оптом или в розницу' });
+      expect(within(group).getByRole('radio', { name: /Оптом/ })).toBeDisabled();
+      expect(within(group).getByRole('radio', { name: /В розницу/ })).toHaveAttribute('aria-checked', 'true');
     });
 
     it('«В розницу» по умолчанию — без условий опта; «Оптом» — условия, сумма и разбиение, строка уходит с режимом', async () => {
@@ -336,19 +509,16 @@ describe('карточка товара', () => {
       expect(terms).toHaveTextContent('1 упаковка = 2 мешка');
       // Крупно — цена за мешок и выгода к рознице, мельче — цена упаковки.
       const [first] = within(terms).getAllByTestId('wholesale-tier');
-      expect(first).toHaveTextContent(/2 упаковки и больше\s*4 мешка\s*−10%\s*90 ₸\s*за мешок\s*180 ₸ за упаковку/);
+      expect(first).toHaveTextContent(/от 2 упаковок\s*4 мешка\s*−10%\s*90 ₸\s*за мешок\s*180 ₸ за упаковку/);
       expect(terms).toHaveTextContent('При меньшем количестве — по розничной цене 100 ₸ за мешок');
-      // Сколько добрать до опта.
-      expect(within(terms).getByTestId('wholesale-next')).toHaveTextContent('Ещё 3 мешка — и цена 90 ₸ за мешок');
       expect(screen.queryByRole('radiogroup', { name: 'Как покупать' })).not.toBeInTheDocument();
-      expect(screen.getByTestId('item-sum')).toHaveTextContent(/100 ₸/);
+      // В «Оптом» счётчик сразу на первой ступени — 2 упаковки = 4 мешка, а не минимум розницы (2026-11-15).
+      expect(screen.getByTestId('item-sum')).toHaveTextContent(/360 ₸/);
+      expect(screen.getByTestId('wholesale-split')).toHaveTextContent(/4 мешка = 2 упаковки × 180 ₸/);
 
-      for (let i = 0; i < 4; i += 1) await userEvent.click(screen.getByRole('button', { name: 'Больше' }));
-      // 5 мешков = 2 упаковки по 180 + 1 мешок по 100.
-      expect(screen.getByTestId('item-sum')).toHaveTextContent(/460 ₸/);
-      expect(screen.getByTestId('wholesale-split')).toHaveTextContent(/5 мешков = 2 упаковки × 180 ₸ \+ 1 мешок × 100 ₸/);
       expect(screen.getAllByTestId('wholesale-tier')[0]).toHaveAttribute('aria-current', 'true');
 
+      // В «Оптом» «+» добавляет упаковку (2 мешка), а не мешок: 6 мешков = 3 упаковки по 170.
       await userEvent.click(screen.getByRole('button', { name: 'Больше' }));
       expect(screen.getByTestId('item-sum')).toHaveTextContent(/510 ₸/);
       expect(screen.getAllByTestId('wholesale-tier')[1]).toHaveAttribute('aria-current', 'true');
@@ -389,12 +559,23 @@ describe('карточка товара', () => {
       expect(screen.queryByTestId('wholesale-next')).not.toBeInTheDocument();
     });
 
-    it('своя цена клиента — выбора нет, условия опта как раньше', async () => {
+    // Скидка клиента опт не снимает (2026-11-15): сервер отдаёт опт уже со скидкой — выбор «Оптом / В розницу» есть.
+    it('скидка клиента — «ваша цена», и опт с выбором остаётся', async () => {
       stubFetch(cardRules({ ...BOTH, yourPrice: true }));
       renderCard();
 
-      expect(await screen.findByTestId('wholesale-terms')).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /^В розницу/ })).not.toBeInTheDocument();
+      expect(await screen.findByTestId('item-your-price')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Оптом/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^В розницу/ })).toBeInTheDocument();
+    });
+
+    // Своя цена клиента — только розница: сервер присылает позицию без опта.
+    it('своя цена клиента — без опта и без выбора', async () => {
+      stubFetch(cardRules({ ...BOTH, yourPrice: true, wholesale: undefined }));
+      renderCard();
+
+      expect(await screen.findByTestId('item-your-price')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Оптом/ })).not.toBeInTheDocument();
     });
 
     it('распродажа без скидки на опт — пометка в условиях', async () => {
@@ -422,6 +603,23 @@ describe('карточка товара', () => {
         const sent = calls.find((call) => call.init?.method === 'PUT');
         expect(JSON.parse(String(sent?.init?.body))).toEqual({ quantity: 100 });
       });
+    });
+
+    it('товар «только опт» при «В розницу» в шапке — та же оптовая карточка, без вкладок способа', async () => {
+      stubFetch([
+        get('/api/portal/catalog/counts', { all: 2, sale: 0, novelty: 0, byCategory: {}, retail: 1, wholesale: 1, both: 0 }),
+        ...cardRules({
+          ...CARD, unit: 'упаковка', price: 1800,
+          terms: { hit: false, novelty: false, ageRestricted: false, minQuantity: 5, quantityStep: 1 },
+          wholesale: { ...WHOLESALE, packQty: 20, retail: false, tiers: [{ from: 5, price: 1800 }, { from: 10, price: 1700 }] },
+        }),
+      ]);
+      Object.keys(localStorage).filter((key) => key.startsWith('qo.orderMode.')).forEach((key) => localStorage.setItem(key, 'RETAIL'));
+      renderCard();
+
+      expect(await screen.findByTestId('wholesale-terms')).toHaveTextContent('Продаётся только упаковками');
+      expect(screen.queryByRole('button', { name: 'Оптом' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'В розницу' })).not.toBeInTheDocument();
     });
 
     it('линейка продаётся сама собой: «за линейку», без строки «1 линейка = 1 линейка × цена»', async () => {
@@ -591,7 +789,7 @@ describe('карточка товара', () => {
     expect(await screen.findByTestId('stock-pill')).toHaveTextContent('В наличии');
   });
 
-  it('штучный товар без кратности — пилюля «Продаётся поштучно» и строка в характеристиках', async () => {
+  it('штучный товар без кратности — пилюля «Продаётся поштучно», в характеристиках не повторяется', async () => {
     stubFetch(cardRules({
       ...CARD,
       unit: 'шт.',
@@ -601,17 +799,35 @@ describe('карточка товара', () => {
     renderCard();
 
     expect(await screen.findByText('Продаётся поштучно')).toBeInTheDocument();
-    const rows = screen.getAllByTestId('item-property').map((row) => row.textContent);
-    expect(rows).toContain('Продаётсяпоштучно');
+    const rows = screen.queryAllByTestId('item-property').map((row) => row.textContent);
+    expect(rows.some((row) => row?.startsWith('Продаётся'))).toBe(false);
   });
 
-  it('свойство «Продаётся» от продавца не дублируется выведенным', async () => {
+  it('свойство «Продаётся» от продавца остаётся в характеристиках', async () => {
     stubFetch(cardRules({ ...CARD, attributes: [{ name: 'Продаётся', value: 'на развес' }] }));
 
     renderCard();
 
     await screen.findByRole('heading', { name: 'Цемент М400' });
     expect(screen.getAllByTestId('item-property').map((row) => row.textContent)).toEqual(['Продаётсяна развес']);
+  });
+
+  it('размер из выбора варианта в характеристиках не повторяется, прочие поля — остаются', async () => {
+    const fields = (size: string) => [
+      { code: 'SIZE', name: 'Размер', type: 'TEXT', value: size },
+      { code: 'SOSTAV', name: 'Состав', type: 'TEXT', value: 'Хлопок' },
+    ];
+    stubFetch(cardRules({
+      ...CARD, fields: fields('S'),
+      variants: [{ itemId: 'item-1', price: 2500, fields: fields('S') }, { itemId: 'item-2', price: 2500, fields: fields('M') }],
+    }));
+
+    renderCard();
+
+    await screen.findByRole('heading', { name: 'Цемент М400' });
+    const rows = screen.getAllByTestId('item-property').map((row) => row.textContent);
+    expect(rows).toContain('СоставХлопок');
+    expect(rows.some((row) => row?.startsWith('Размер'))).toBe(false);
   });
 
   it('«Как подобрать размер» открывает подсказку, а из неё — вопрос продавцу', async () => {
@@ -678,6 +894,26 @@ describe('карточка товара', () => {
     await userEvent.click(hips);
     expect(hips).toHaveAttribute('aria-expanded', 'false');
     expect(within(dialog).getByTestId('size-schema-hips')).toHaveAttribute('data-size', 'small');
+  });
+
+  it('с таблицей продавца подсказка объясняет только её мерки', async () => {
+    const variant = (itemId: string, size: string) => ({
+      itemId, price: 2500, fields: [{ code: 'SIZE', name: 'Размер', type: 'TEXT', value: size }],
+    });
+    stubFetch(cardRules({
+      ...CARD, sizeGuide: 'CLOTHING', variants: [variant('item-1', 'M'), variant('item-2', 'L')],
+      sizeChart: { current: 'M', sizes: [{ code: 'M', label: 'M' }, { code: 'L', label: 'L' }],
+        rows: [{ measure: 'CHEST', values: { M: '96', L: '104' } }, { measure: 'HEIGHT', values: { M: '176', L: '182' } }] },
+    }));
+
+    renderCard();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Таблица размеров' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Таблица размеров' });
+    expect(within(dialog).getByRole('button', { name: /Грудь/ })).toBeInTheDocument();
+    for (const absent of [/Талия/, /Бёдра/, /Длина по внутреннему шву/]) {
+      expect(within(dialog).queryByRole('button', { name: absent })).not.toBeInTheDocument();
+    }
   });
 
   /**
@@ -994,6 +1230,8 @@ describe('карточка товара', () => {
 
     expect(await screen.findByRole('heading', { name: 'Из чего сделано' })).toBeInTheDocument();
     expect(screen.getByText('Полиэстер')).toBeInTheDocument();
+    // Строкой «Состав» он уже не повторяется.
+    expect(screen.queryAllByTestId('item-property').some((row) => row.textContent?.startsWith('Состав'))).toBe(false);
 
     expect(await screen.findByTestId('sale-participation')).toHaveTextContent('Участвует в акции «Осенняя распродажа»');
     const discounts = screen.getByRole('region', { name: 'Скидки на этот товар' });
@@ -1005,6 +1243,25 @@ describe('карточка товара', () => {
     expect(within(discounts).getByText(/^До оптовой скидки: ещё 100\s000\s₸$/)).toBeInTheDocument();
     // Отсчёт включён продавцом — видны дни, часы и минуты.
     expect(screen.getByTestId('sale-participation')).toHaveTextContent('дн');
+  });
+
+  // Распродажи опта и розницы свои: у «только опт» плашка — оптовой акции, а не той, что выбрана в каталоге (2026-11-15).
+  it('у товара «только опт» плашка называет оптовую распродажу', async () => {
+    const { calls } = stubFetch([
+      get('/api/portal/promotions?mode=WHOLESALE',
+        { sale: { title: 'Оптовая неделя', maxPercent: 10, endsOn: '2099-11-21', countdown: false }, volumeTiers: [], deals: [], dealCount: 0 }),
+      get('/api/portal/promotions',
+        { sale: { title: 'Осенняя распродажа', maxPercent: 20, endsOn: '2099-11-30', countdown: false }, volumeTiers: [], deals: [], dealCount: 0 }),
+      ...cardRules({
+        ...CARD, unit: 'упаковка', price: 1620, oldPrice: 1800, discountPercent: 10,
+        terms: { hit: false, novelty: false, ageRestricted: false, minQuantity: 1, quantityStep: 1 },
+        wholesale: { unit: 'упаковка', pieceUnit: 'мешок', packQty: 20, retail: false, tiers: [{ from: 1, price: 1620, oldPrice: 1800 }] },
+      }),
+    ]);
+    renderCard();
+
+    expect(await screen.findByTestId('sale-participation')).toHaveTextContent('«Оптовая неделя»');
+    expect(calls.some((call) => call.url.includes('/api/portal/promotions') && call.url.includes('mode=WHOLESALE'))).toBe(true);
   });
 
   describe('«Оптом дешевле» в «Скидках на этот товар»', () => {
@@ -1147,34 +1404,45 @@ describe('свой отзыв в карточке по состоянию мод
   });
 });
 
-/** Условия получения — двумя карточками, как в макете ПК-К3, из настоящих условий магазина. */
+/** Как получить — одной строкой-справкой, без адресов и цен (просьба владельца 2026-11-14). */
 describe('доставка и самовывоз в карточке товара', () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it('доставка называет порог бесплатной, самовывоз — точку и часы', async () => {
+  const method = (pickup: boolean) => ({ id: pickup ? 'p' : 'd', name: pickup ? 'Самовывоз' : 'До двери', pickup,
+    requiresAddress: !pickup, requiresFloor: false, requiresTimeSlot: false, price: 1500, freeFromAmount: 50000,
+    negotiable: false, zones: [], slots: [], carriers: [] });
+
+  it('возит и есть точка самовывоза — «Есть доставка и самовывоз», без адреса и цены', async () => {
     stubFetch([
-      get('/api/portal/delivery', {
-        mode: 'ENABLED',
-        methods: [{ id: 'm1', name: 'До двери', pickup: false, requiresAddress: true, requiresFloor: false,
-          requiresTimeSlot: false, price: 1500, freeFromAmount: 50000, negotiable: false, zones: [], slots: [], carriers: [] }],
-        pickupPoints: [{ id: 'p1', name: 'Склад', address: 'ул. Рыскулова 101', workingHours: 'до 18:00' }],
-      }),
+      get('/api/portal/delivery', { mode: 'ENABLED', methods: [method(false)],
+        pickupPoints: [{ id: 'p1', name: 'Склад', address: 'ул. Рыскулова 101', workingHours: 'до 18:00' }] }),
       ...cardRules(),
     ]);
     renderCard();
 
-    expect(await screen.findByTestId('deal-delivery')).toHaveTextContent('Доставкабесплатно от 50 000 ₸');
-    expect(screen.getByTestId('deal-pickup')).toHaveTextContent('ул. Рыскулова 101 · до 18:00');
+    expect(await screen.findByTestId('deal-way')).toHaveTextContent('Есть доставка и самовывоз');
+    expect(screen.getByTestId('deal-way')).toHaveAttribute('href', '/delivery');
+    expect(screen.queryByText(/Рыскулова/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/50 000/)).not.toBeInTheDocument();
   });
 
-  it('продавец не возит — карточки доставки нет', async () => {
+  it('только самовывоз', async () => {
     stubFetch([
       get('/api/portal/delivery', { mode: 'PICKUP_ONLY', methods: [], pickupPoints: [] }),
       ...cardRules(),
     ]);
     renderCard();
 
-    await screen.findByRole('heading', { level: 1, name: 'Цемент М400' });
-    expect(screen.queryByTestId('deal-delivery')).not.toBeInTheDocument();
+    expect(await screen.findByTestId('deal-way')).toHaveTextContent('Только самовывоз');
+  });
+
+  it('только доставка', async () => {
+    stubFetch([
+      get('/api/portal/delivery', { mode: 'ENABLED', methods: [method(false)], pickupPoints: [] }),
+      ...cardRules(),
+    ]);
+    renderCard();
+
+    expect(await screen.findByTestId('deal-way')).toHaveTextContent('Есть доставка');
   });
 });

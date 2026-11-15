@@ -4,12 +4,12 @@ import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetPortalPromotionsQueryKey,
   setPortalPromoSubscription,
-  useGetPortalPromotions,
 } from '../../api/generated';
 import { useSupplier } from '../../supplier/useSupplier';
 import { Card } from '../../ui/Card';
 import { Switch } from '../../ui/Switch';
 import { Bell } from '../../ui/icons';
+import { usePromotions } from '../promotions/usePromotions';
 
 /**
  * «Сообщать о новинках и акциях» — в профиле и в «Акциях и скидках». Подписка включена по умолчанию
@@ -22,7 +22,7 @@ export function PromoSubscription() {
   const queryClient = useQueryClient();
   const { supplierId } = useSupplier();
   // Подписка — у магазина: в профиле до выбора магазина спрашивать не у кого (иначе 403 без X-Supplier-Id).
-  const promotions = useGetPortalPromotions({ query: { enabled: supplierId !== null } });
+  const promotions = usePromotions(supplierId !== null);
   const [busy, setBusy] = useState(false);
   const subscription = promotions.data?.status === 200 ? promotions.data.data.subscription : undefined;
   if (!subscription) return null;
@@ -32,7 +32,12 @@ export function PromoSubscription() {
     setBusy(true);
     try {
       const response = await setPortalPromoSubscription({ subscribed: !subscribed });
-      if (response.status === 200) queryClient.setQueryData(getGetPortalPromotionsQueryKey(), response);
+      // Подписка одна на магазин, а акции опта и розницы — под своими ключами: ответ розничный,
+      // поэтому в каждый кладётся только подписка.
+      if (response.status === 200) {
+        queryClient.setQueriesData<typeof promotions.data>({ queryKey: getGetPortalPromotionsQueryKey() }, (old) =>
+          old?.status === 200 ? { ...old, data: { ...old.data, subscription: response.data.subscription } } : old);
+      }
     } finally {
       setBusy(false);
     }

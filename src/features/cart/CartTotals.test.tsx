@@ -26,6 +26,18 @@ describe('итоги корзины', () => {
     expect(screen.getByTestId('cart-goods')).toHaveTextContent('Товары, 5 шт.');
   });
 
+  it('оптовая строка целыми упаковками считается упаковками, а не штуками', () => {
+    const socks = { ...line('шт', 40, 3000), mode: 'WHOLESALE', split: { packs: 4, packUnit: 'упаковка', packQty: 10, packPrice: 30000, rest: 0 } } as CartLineDto;
+    render(<GoodsLine cart={cart([socks])} />);
+    expect(screen.getByTestId('cart-goods')).toHaveTextContent('Товары, 4 упаковки');
+  });
+
+  it('упаковки и штуки вместе — позициями', () => {
+    const socks = { ...line('шт', 40, 3000), mode: 'WHOLESALE', split: { packs: 4, packUnit: 'упаковка', packQty: 10, packPrice: 30000, rest: 0 } } as CartLineDto;
+    render(<GoodsLine cart={cart([socks, line('шт', 2, 100)])} />);
+    expect(screen.getByTestId('cart-goods')).toHaveTextContent('Товары, 2 позиции');
+  });
+
   it('смешанные единицы считаются позициями', () => {
     render(<GoodsLine cart={cart([line('шт', 3, 100), line('мешок', 2, 2500)])} />);
     expect(screen.getByTestId('cart-goods')).toHaveTextContent('Товары, 2 позиции');

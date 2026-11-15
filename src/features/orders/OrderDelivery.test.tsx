@@ -6,6 +6,14 @@ import { OrderDelivery } from './OrderDelivery';
 vi.mock('../maps/useMapHome', () => ({ useMapHome: () => null }));
 
 describe('доставка заявки', () => {
+  it('самовывоз — заголовок «Как получите», а не «Доставка»; доставка — «Доставка»', () => {
+    const { unmount } = render(<OrderDelivery delivery={{ methodName: 'Самовывоз' }} pickup />);
+    expect(screen.getByTestId('order-delivery-block')).toHaveTextContent(/^Как получитеСамовывоз/);
+    unmount();
+    render(<OrderDelivery delivery={{ methodName: 'Межгород' }} />);
+    expect(screen.getByTestId('order-delivery-block')).toHaveTextContent(/^ДоставкаМежгород/);
+  });
+
   it('способ, адрес, перевозчик с телефоном, кому платить и трек со ссылкой', () => {
     render(<OrderDelivery delivery={{
       methodName: 'Межгород', address: 'Кенесары 1', city: 'Астана', carrierName: 'СДЭК',

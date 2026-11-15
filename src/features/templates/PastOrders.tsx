@@ -14,6 +14,7 @@ import { useOrderMode } from '../cart/orderMode';
 import { kindOf, matchesSearch } from '../orders/myOrdersModel';
 import { NothingAdded, useStayIfEmpty } from '../orders/stayIfEmpty';
 import { orderDay } from '../orders/orderText';
+import { lineTitle, orderRows } from '../orders/OrderLineGroup';
 
 /** Сколько заявок видно сразу: дальше — «Показать ещё» или поиск. */
 const FIRST = 5;
@@ -63,7 +64,9 @@ export function PastOrders() {
       {shown.length === 0 ? <p className="px-1 text-sm text-ink-subtle">{t('templates.past.nothing')}</p> : null}
       {shown.map((order) => {
         const kind = kindOf(order);
-        const names = order.submitted.map((line) => line.name).join(', ');
+        // Линейка одежды — одним названием с цветом, а не именем каждого размера.
+        const names = orderRows(order.submitted)
+          .map((row) => (row.kind === 'line' ? lineTitle(row.rows).title : row.line.name)).join(', ');
         return (
           <Card key={order.id} data-testid="past-order" className="flex flex-col gap-2.5 p-4">
             <div className="flex items-start justify-between gap-3">

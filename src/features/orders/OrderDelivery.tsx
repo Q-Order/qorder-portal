@@ -10,13 +10,14 @@ import { dayMonth } from '../../shared/format';
  * перевозчик с телефоном,
  * кому платить за перевозку и номер отправления со ссылкой — когда везёт перевозчик.
  */
-export function OrderDelivery({ delivery }: { delivery: PortalOrderDelivery }) {
+export function OrderDelivery({ delivery, pickup = false }: { delivery: PortalOrderDelivery; pickup?: boolean }) {
   const { t } = useTranslation();
   const where = [delivery.city, delivery.address].filter(Boolean).join(', ');
 
   return (
     <div data-testid="order-delivery-block" className="flex flex-col gap-1 text-sm text-ink">
-      <span className="text-xs font-semibold uppercase tracking-[.06em] text-ink-subtle">{t('orders.delivery.title')}</span>
+      {/* Самовывоз — «Как получите», а не «Доставка» над словом «Самовывоз» (замечание владельца 2026-11-15). */}
+      <span className="text-xs font-semibold uppercase tracking-[.06em] text-ink-subtle">{t(pickup ? 'checkout.steps.receive' : 'orders.delivery.title')}</span>
       <span>{[delivery.methodName, where].filter(Boolean).join(' · ')}</span>
       {delivery.date ? (
         <span data-testid="order-delivery-date" className="font-semibold">

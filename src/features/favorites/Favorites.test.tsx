@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { FavoritesPage } from './FavoritesPage';
 import { renderScreen } from '../../test/render';
 import { get, method, stubFetch } from '../../test/http';
+import { setOrderMode } from '../cart/orderMode';
 
 const CEMENT = { itemId: 'item-1', name: 'Цемент М400', unit: 'мешок', price: 2500, available: true };
 const GONE = { itemId: 'item-2', name: 'Ротбанд', available: false };
@@ -12,6 +13,30 @@ const emptyCart = { lines: [], total: 0, skipped: [] };
 
 describe('избранное', () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  it('одежда в «Оптом» — цена за штуку, цена линейки и количество линейками; в «В розницу» — штуками', async () => {
+    const jacket = { itemId: 'bl-52', name: 'Куртка AZA01', unit: 'шт', price: 12000, available: true,
+      wholesale: { unit: 'линейка', packQty: 6, pieceUnit: 'шт', retail: true, linePieces: 6, piecePrice: 10000,
+        tiers: [{ from: 1, price: 60000 }] } };
+    setOrderMode('supplier-1', 'WHOLESALE');
+    const { calls } = stubFetch([get('/api/portal/favorites', [jacket]), get('/api/portal/cart', emptyCart),
+      method('PUT', '/api/portal/cart/wholesale-lines/bl-52', emptyCart)]);
+    const { unmount } = renderScreen(<FavoritesPage />);
+    const row = await screen.findByTestId('favorite-row');
+    expect(row).toHaveTextContent(/10\s000/);
+    expect(within(row).getByTestId('favorite-line')).toHaveTextContent(/Линейка 6 шт — 60\s000/);
+    await userEvent.click(within(row).getByRole('button', { name: 'Ещё линейку' }));
+    await waitFor(() => expect(calls.some((call) => call.url.includes('/wholesale-lines/bl-52'))).toBe(true));
+    unmount();
+
+    setOrderMode('supplier-1', 'RETAIL');
+    stubFetch([get('/api/portal/favorites', [jacket]), get('/api/portal/cart', emptyCart)]);
+    renderScreen(<FavoritesPage />);
+    const retail = await screen.findByTestId('favorite-row');
+    expect(retail).toHaveTextContent(/12\s000/);
+    expect(within(retail).queryByTestId('favorite-line')).not.toBeInTheDocument();
+    expect(within(retail).queryByRole('button', { name: 'Ещё линейку' })).not.toBeInTheDocument();
+  });
 
   it('снятая с продажи позиция остаётся в списке, но погашенной', async () => {
     stubFetch([get('/api/portal/favorites', [CEMENT, GONE]), get('/api/portal/cart', emptyCart)]);

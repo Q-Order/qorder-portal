@@ -8,7 +8,7 @@ import { paymentPlan } from '../cart/paymentPlan';
 /** Из чего сложился итог отправленной редакции: её снимок, подтверждённый клиентом. */
 export type OrderBreakdown = Pick<
   PortalOrderDto, 'goodsTotal' | 'discount' | 'deliveryPrice' | 'loadersPrice' | 'loadersPayee' | 'vatAmount' | 'goodsVatMode'
-  | 'delivery'
+  | 'delivery' | 'pickup'
 >;
 
 /**
@@ -57,8 +57,11 @@ export function OrderTotals({ total, breakdown, currency, className }: {
       ) : null}
       {breakdown?.deliveryPrice != null && !directDelivery ? (
         <div data-testid="order-delivery" className="flex justify-between gap-2 text-ink-muted">
-          <span>{t('checkout.summary.delivery')}</span>
-          <span className="tabular-nums text-ink">{money(breakdown.deliveryPrice, currency)}</span>
+          {/* Самовывоз — строкой «Самовывоз — бесплатно», а не «Доставка 0» (замечание владельца 2026-11-15). */}
+          <span>{t(breakdown.pickup ? 'checkout.delivery.pickup' : 'checkout.summary.delivery')}</span>
+          <span className="tabular-nums text-ink">
+            {breakdown.pickup && !breakdown.deliveryPrice ? t('checkout.steps.free') : money(breakdown.deliveryPrice, currency)}
+          </span>
         </div>
       ) : null}
       {breakdown?.loadersPrice != null && breakdown.loadersPayee !== 'DIRECT' ? (

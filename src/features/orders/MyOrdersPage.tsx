@@ -1,7 +1,8 @@
 import { CHIP_ROW } from '../../ui/chipRow';
 import { LoadFailed } from '../../ui/LoadFailed';
-import { useMemo, useState } from 'react';
-import { Search } from '../../ui/icons';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Funnel, Search } from '../../ui/icons';
+import { Sheet } from '../../ui/Sheet';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import {
@@ -19,8 +20,9 @@ import { OrderLink, OrderPane, OrderPick } from './OrderRow';
 import { useWideScreen } from '../../ui/useWideScreen';
 import { OrderStatement } from './OrderStatement';
 import {
-  FILTERS, ORDER_SIZES, kindOf, matchesFilter, matchesSearch, sorted, unreadByOrder, type OrderFilter,
+  FILTERS, ORDER_SIZES, inPeriod, kindOf, matchesFilter, matchesSearch, sorted, unreadByOrder, type OrderFilter, type Period,
 } from './myOrdersModel';
+import { PeriodChip, PeriodMenu } from './PeriodMenu';
 
 /**
  * Мои заявки — «Вариант Б» (макеты SimplePicOrders / SimplePicWebOrders).
@@ -50,10 +52,19 @@ export function MyOrdersPage() {
 
   const [filter, setFilter] = useState<OrderFilter>('all');
   const [query, setQuery] = useState('');
+  // Период по дате оформления (просьба владельца 2026-11-15): отборы по статусу считаются внутри него.
+  const [period, setPeriod] = useState<Period>({});
   const [page, setPage] = useState(0);
   const [size, setSize] = useState(ORDER_SIZES[0]);
   const wide = useWideScreen();
   const [picked, setPicked] = useState<string>();
+  // Телефон: отборы ещё и меню слева — не листать ряд плашек вбок (просьба владельца 2026-11-15).
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Выбранный отбор — на виду: из меню можно выбрать плашку, спрятанную за краем ряда.
+  const chipRow = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    chipRow.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  }, [filter]);
 
   // Телефон: под заголовком — город клиента (для него наличие и доставка); нажатие — в профиль.
   const title = (
@@ -93,7 +104,7 @@ export function MyOrdersPage() {
   }
 
   const visible = sorted(
-    orders.filter((order) => matchesFilter(order, filter) && matchesSearch(order, query)),
+    orders.filter((order) => inPeriod(order, period) && matchesFilter(order, filter) && matchesSearch(order, query)),
     unread,
   );
   const pages = Math.max(1, Math.ceil(visible.length / size));
@@ -105,16 +116,20 @@ export function MyOrdersPage() {
   const resetAll = () => {
     setFilter('all');
     setQuery('');
+    setPeriod({});
     setPage(0);
   };
 
+  const countOf = (key: OrderFilter) => orders.filter((order) => inPeriod(order, period) && matchesFilter(order, key)).length;
+  const pickFilter = (key: OrderFilter) => { setFilter(key); setPage(0); };
+
   const chips = (
-    <div role="group" aria-label={t('orders.v2.filtersLabel')} className={cn(CHIP_ROW, '-mx-4 gap-2 px-4 pb-1 lg:mx-0 lg:px-0')}>
+    <div ref={chipRow} role="group" aria-label={t('orders.v2.filtersLabel')} className={cn(CHIP_ROW, '-mx-4 gap-2 px-4 pb-1 lg:mx-0 lg:px-0')}>
       {FILTERS.map((key) => {
-        const count = orders.filter((order) => matchesFilter(order, key)).length;
+        const count = countOf(key);
         const active = filter === key;
         return (
-          <button key={key} type="button" aria-pressed={active} onClick={() => { setFilter(key); setPage(0); }}
+          <button key={key} type="button" aria-pressed={active} onClick={() => pickFilter(key)}
             className={cn(
               'inline-flex min-h-12 shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-2xl border-[3px] border-solid px-3.5 text-body font-extrabold',
               'transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
@@ -127,6 +142,9 @@ export function MyOrdersPage() {
       })}
     </div>
   );
+
+  const periodMenu = <PeriodMenu value={period} onApply={(next) => { setPeriod(next); setPage(0); }} />;
+  const periodChip = <PeriodChip value={period} onReset={() => { setPeriod({}); setPage(0); }} />;
 
   const nothing = (
     <div className="flex flex-col items-center gap-2 rounded-[var(--radius-card)] border-2 border-dashed border-line px-5 py-10 text-center">
@@ -160,13 +178,20 @@ export function MyOrdersPage() {
         </div>
         <div data-testid="orders-split" className="grid grid-cols-[27.5rem_minmax(0,1fr)] items-start gap-7">
           <div className="flex min-w-0 flex-col gap-3">
-            <label className="flex h-14 items-center gap-3 rounded-[var(--radius-control)] border-2 border-line bg-surface px-4 focus-within:border-shop">
+            <div className="flex items-center gap-2">
+            <label className="flex h-14 min-w-0 flex-1 items-center gap-3 rounded-[var(--radius-control)] border-2 border-line bg-surface px-4 focus-within:border-shop">
               <Search aria-hidden="true" className="size-5 shrink-0 text-ink-muted" />
               <input type="search" value={query} placeholder={t('orders.v2.search')} aria-label={t('orders.v2.search')}
                 onChange={(event) => { setQuery(event.target.value); setPage(0); }}
                 className="h-full min-w-0 flex-1 border-0 bg-transparent text-base text-ink placeholder:text-ink-subtle focus:outline-none" />
             </label>
-            {chips}
+            {periodMenu}
+            </div>
+            {/* Плашка периода — в начале ряда отборов: в строке поиска она сжимала поле (2026-11-15). */}
+            <div className="flex items-start gap-2">
+              {periodChip}
+              <div className="min-w-0 flex-1 [&>[role=group]]:ml-0 [&>[role=group]]:pl-0">{chips}</div>
+            </div>
             {shown.length === 0 ? nothing : (
               <div className="flex flex-col gap-2.5">
                 {shown.map((order) => (
@@ -197,7 +222,37 @@ export function MyOrdersPage() {
   return (
     <div className="flex flex-col gap-3">
       {title}
-      {chips}
+      <div className="flex items-start gap-2">
+        {periodMenu}
+        <button type="button" aria-label={t('orders.v2.filtersMenu')} aria-haspopup="dialog" aria-expanded={menuOpen}
+          onClick={() => setMenuOpen(true)}
+          className={cn(
+            'flex size-12 shrink-0 cursor-pointer items-center justify-center rounded-2xl border-[3px] border-solid transition-colors duration-200',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            filter !== 'all' ? 'border-shop bg-shop text-on-shop' : 'border-line bg-surface text-ink hover:border-ink',
+          )}>
+          <Funnel className="size-6" />
+        </button>
+        {periodChip}
+        {/* Ряд плашек — от значков, а не от края экрана: иначе при прокрутке он наезжал на них. */}
+        <div className="min-w-0 flex-1 [&>[role=group]]:ml-0 [&>[role=group]]:pl-0">{chips}</div>
+      </div>
+      <Sheet open={menuOpen} onOpenChange={setMenuOpen} side="left" title={t('orders.v2.filtersLabel')}>
+        <div role="radiogroup" aria-label={t('orders.v2.filtersLabel')} className="flex flex-col gap-1.5">
+          {FILTERS.map((key) => (
+            <button key={key} type="button" role="radio" aria-checked={filter === key}
+              onClick={() => { pickFilter(key); setMenuOpen(false); }}
+              className={cn(
+                'flex min-h-12 w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border-0 px-4 text-left text-body font-extrabold',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                filter === key ? 'bg-shop text-on-shop' : 'bg-transparent text-ink hover:bg-sunk',
+              )}>
+              {t(`orders.v2.filters.${key}`)}
+              <span className="tabular-nums">{countOf(key)}</span>
+            </button>
+          ))}
+        </div>
+      </Sheet>
       {shown.length === 0 ? nothing : groups.map((group) => (
         <section key={group.key} aria-label={group.title || undefined} className="flex flex-col gap-3">
           {group.title ? <h2 className="m-0 mt-1 text-lead font-extrabold text-ink">{group.title}</h2> : null}

@@ -1,11 +1,14 @@
-import { lineOf, takenIn } from '../cart/cartPart';
-import { useEffect, useRef, useState } from 'react';
+import { lineOf, linesIn, takenIn } from '../cart/cartPart';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { PackContents, packMembers } from './PackContents';
+import { sizeRow } from './sizeSystem';
+import type { SizeGrid as ClothingGrid } from './sizeStandard';
+import { ModelArticles } from './ModelArticles';
 import { packsOnly, splitOf, tierFor, toPieces } from '../cart/wholesale';
 import * as Dialog from '@radix-ui/react-dialog';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, MessageCircle, Package, Ruler, ShieldCheck, Star, Store, Tag, Truck, X } from '../../ui/icons';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronRight, MessageCircle, Package, Ruler, ShieldCheck, Star, Store, Tag, Truck, X } from '../../ui/icons';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   getPortalCatalogItem,
@@ -14,44 +17,47 @@ import {
   useGetPortalCatalogSubstitutes,
   useGetPortalCategories,
   useGetPortalDeliveryOptions,
-  useGetPortalPromotions,
   type ItemSaleTerms,
   type ShowcaseCardDto,
+  type ShowcaseVariantDto,
+  type SizeChartDto,
+  type CardLineDto,
 } from '../../api/generated';
+import type { Currency } from '../../shared/currency';
 import { fieldText } from './fieldText';
 import { CartBar } from '../cart/CartBar';
 import { QuantityField } from '../cart/QuantityField';
-import { cartOf, useCart, useSetCartLine, useWholesaleMinimum } from '../cart/useCart';
+import { cartOf, useCart, useSetCartLine, useWholesaleLines, useWholesaleMinimum } from '../cart/useCart';
+import { LineQuantity } from '../cart/LineQuantity';
 import { ModeSwitch, type SaleMode } from '../cart/ModeSwitch';
+import { useLockOrderMode } from './OrderModeSwitch';
 import { useOrderMode } from '../cart/orderMode';
-import { useShopChannel } from './OrderModeSwitch';
 import { announceAdded } from '../cart/cartDrawer';
 import { useAddToCart } from '../cart/ageGate';
 import { firstQuantity, fitQuantity, lessQuantity, stepOf } from '../cart/saleTerms';
 import { FavoriteButton } from '../favorites/FavoriteButton';
 import { RestockButton } from './RestockButton';
 import { ReviewsBlock } from '../reviews/ReviewsBlock';
-import { useCurrentShop } from '../shell/Shops';
-import { hoursText } from '../shell/shopHours';
 import { PageHelp } from '../shell/HelpGuide';
 import { MediaGallery } from './MediaGallery';
-import { SizeGrid, sizeRowsOf } from './SizeGrid';
-import { VariantPicker } from './VariantPicker';
+import { sizeRowsOf } from './SizeGrid';
+import { COLOUR, VariantPicker, axesOf, colourOf, valuesOf } from './VariantPicker';
+import { SizeChartTable } from './SizeChartTable';
 import { StockNote } from './StockNote';
-import { soldByOf } from './soldBy';
 import { ItemBadges, ItemFacts } from './CatalogPage';
-import { DealPrice, MarkBadge, RatingBadge, SaleChannelBadge, TINY_BADGE, WholesaleDealBadge, dealOf, inMode, isWholesaleDeal } from './itemParts';
+import { DealPrice, MarkBadge, RatingBadge, SaleChannelBadge, TINY_BADGE, WholesaleDealBadge, dealOf, inMode, isWholesaleDeal, PressNote, perPiece } from './itemParts';
 import type { ShowcaseCardDtoSizeGuide, ShowcaseItemDto, ShowcaseWholesaleDto } from '../../api/generated';
 import { ItemThumb } from './ItemThumb';
 import { dayMonth, decimal, money, shortDate } from '../../shared/format';
 import { useSupplierCurrency } from '../../supplier/SupplierCurrency';
-import { quantityWithUnit, unitPer } from '../../shared/units';
+import { fromQuantity, quantityWithUnit, unitPer } from '../../shared/units';
 import { intlLocale } from '../../i18n';
 import { Button } from '../../ui/Button';
 import { Skeleton } from '../../ui/Skeleton';
 import { flyToCart } from '../../ui/flyToCart';
 import { useBackToSection } from '../../ui/sectionBack';
 import { cn } from '../../ui/cn';
+import { usePromotions } from '../promotions/usePromotions';
 
 /**
  * Карточка товара: то, за чем сюда приходят с витрины.
@@ -139,8 +145,22 @@ function variantPreview(queryClient: QueryClient, itemId: string) {
   return undefined;
 }
 
+/**
+ * Снимки цвета, а не размера: у всех размеров одного цвета — фото первого его варианта со снимками,
+ * чтобы выбор размера менял только цену (замечание владельца 2026-11-14). Без цвета — первого варианта со снимками.
+ */
+export function colourMedia(item: ShowcaseCardDto): ShowcaseCardDto['media'] {
+  const variants = item.variants ?? [];
+  const current = variants.find((variant) => variant.itemId === item.id);
+  const colour = axesOf(variants).find((axis) => axis.colour)?.code;
+  const tone = (variant: ShowcaseVariantDto) => (colour ? valuesOf(variant).get(colour)?.text : undefined);
+  const same = variants.find((variant) => tone(variant) === (current ? tone(current) : undefined) && variant.media?.length);
+  return same?.media?.length ? same.media : item.media;
+}
+
 function ItemCard({ item }: { item: ShowcaseCardDto }) {
   const { t } = useTranslation();
+  const { gallery, decision, beside } = useSpecBeside();
   const categories = useGetPortalCategories();
   const category = categories.data?.status === 200
     ? categories.data.data.find((entry) => entry.id === item.categoryId)
@@ -156,26 +176,23 @@ function ItemCard({ item }: { item: ShowcaseCardDto }) {
     занимает место сообщением ни о чём. Внутренних здесь не бывает вовсе —
     сервер их не отдаёт ни кодом, ни подписью.
   */
-  const properties = [
+  const all = [
     ...(item.fields ?? []).map((field) => (
-      { key: `field:${field.code}`, name: field.name, value: fieldText(field) }
+      { key: `field:${field.code}`, code: field.code, name: field.name, value: fieldText(field), hex: field.hex }
     )),
     ...item.attributes.map((attribute) => (
-      { key: `attribute:${attribute.name}`, name: attribute.name, value: attribute.value }
+      { key: `attribute:${attribute.name}`, code: undefined, name: attribute.name, value: attribute.value, hex: undefined }
     )),
   ].filter((property) => property.value.trim() !== '');
   /*
-    «Продаётся — поштучно» строкой характеристик, как в макете. Выводится
-    из единицы и кратности; если продавец сам завёл такое свойство, его
-    слово важнее выведенного, и второй строки нет.
+    Без повторов: размер, цвет и прочие оси выбора видны в выборе варианта выше, а «Продаётся
+    поштучно» и кратность — пометками под ценой (просьба владельца 2026-11-14).
   */
-  const soldBy = soldByOf(item.unit, item.terms, t).value;
-  if (soldBy && !properties.some((property) => /^(продаётся|продается|sold|сатылады)/i.test(property.name))) {
-    properties.push({ key: 'soldBy', name: t('item.soldBy.label'), value: soldBy });
-  }
+  const picked = new Set((item.variants?.length ?? 0) >= 2 ? axesOf(item.variants!).map((axis) => axis.code) : []);
+  const properties = all.filter((property) => !property.code || !picked.has(property.code));
   const hasSpec = properties.length > 0 || !!item.description;
   // Метки отзыва о размере — только у товара, у которого размер есть.
-  const hasSize = properties.some((property) => /^(размер|size|өлшем)/i.test(property.name));
+  const hasSize = all.some((property) => /^(размер|size|өлшем)/i.test(property.name));
 
   return (
     <div className="flex flex-col gap-6 pb-40 lg:gap-11 lg:pb-0">
@@ -196,8 +213,11 @@ function ItemCard({ item }: { item: ShowcaseCardDto }) {
 
       {/*
         Три части одной сеткой: снимки, решение и характеристики. На мониторе
-        характеристики стоят под снимками, а решение — колонкой справа во всю
-        высоту; на телефоне всё идёт подряд — снимки, решение, характеристики.
+        снимки и решение стоят рядом, а характеристики — под ними во всю ширину:
+        под одними снимками справа оставалась пустота (просьба владельца 2026-11-13).
+        Если решение заметно выше снимков (оптовые цены), пустота была бы уже слева —
+        тогда характеристики встают под снимки (`useSpecBeside`);
+        на телефоне всё идёт подряд — снимки, решение, характеристики.
         Панель одна: две копии для двух ширин диктор прочёл бы дважды.
       */}
       <section className="flex flex-col lg:grid lg:grid-cols-[minmax(0,0.78fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-8 lg:gap-y-5">
@@ -206,9 +226,15 @@ function ItemCard({ item }: { item: ShowcaseCardDto }) {
           от края до края, иначе он читался бы картинкой внутри карточки,
           а не подложкой страницы.
         */}
-        <div className="-mx-4 -mt-4 md:mx-0 md:mt-0 lg:col-start-1 lg:row-start-1">
+        {/*
+          Характеристики под снимком (`beside`) — одной левой колонкой, которая держится под шапкой,
+          пока листается длинная правая часть (таблица размеров, ступени опта): иначе слева
+          оставалась пустота (просьба владельца 2026-11-14). На телефоне колонки нет — `contents`.
+        */}
+        <div className={cn('contents', beside && 'lg:sticky lg:top-[calc(var(--header-h)+1.5rem)] lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:flex lg:flex-col lg:gap-5 lg:self-start')}>
+        <div ref={gallery} className="-mx-4 -mt-4 md:mx-0 md:mt-0 lg:col-start-1 lg:row-start-1">
           <MediaGallery
-            media={item.media}
+            media={colourMedia(item)}
             itemName={item.name}
             topLeft={(
               <div className="flex items-start gap-2">
@@ -230,14 +256,20 @@ function ItemCard({ item }: { item: ShowcaseCardDto }) {
             )}
           />
         </div>
+        {hasSpec && beside && (
+          <div className="flex flex-col gap-4">
+            <SpecPanel item={item} properties={properties} wide={false} />
+          </div>
+        )}
+        </div>
 
-        <div className="lg:col-start-2 lg:row-span-2 lg:row-start-1">
+        <div ref={decision} className={cn('lg:col-start-2 lg:row-start-1', beside && 'lg:row-span-2')}>
           <Decision item={item} categoryName={category?.name} />
         </div>
 
-        {hasSpec && (
-          <div className="mt-5 flex flex-col gap-4 lg:col-start-1 lg:row-start-2 lg:mt-0">
-            <SpecPanel item={item} properties={properties} />
+        {hasSpec && !beside && (
+          <div className="mt-5 flex flex-col gap-4 lg:col-span-2 lg:col-start-1 lg:row-start-2 lg:mt-0">
+            <SpecPanel item={item} properties={properties} wide />
           </div>
         )}
       </section>
@@ -274,11 +306,15 @@ function Decision({ item, categoryName }: { item: ShowcaseCardDto; categoryName?
   // Вопрос о товаре — в переписку: там и прежние разговоры о нём, и новый вопрос.
   const ask = () => navigate(`/questions?item=${encodeURIComponent(item.id)}`);
   const mode = useSaleMode(item);
-  const { orderMode, setOrderMode, twoWays } = useShopChannel();
-  // Товар одного способа в магазине обоих: переключатель тот же, на чужом способе — предупреждение (2026-11-06).
-  const only: SaleMode | undefined = item.yourPrice || item.wholesale?.retail ? undefined : item.wholesale ? 'WHOLESALE' : 'RETAIL';
+  // Своя цена клиента приходит без опта, скидка клиента — с оптом со скидкой: режим решает сам опт (2026-11-15).
+  const only: SaleMode | undefined = item.wholesale?.retail ? undefined : item.wholesale ? 'WHOLESALE' : 'RETAIL';
+  useLockOrderMode(only);
   // Цена, условия и распродажа — выбранной заявки: в «Оптом» опт, в «В розницу» розница (2026-11-06).
   const view = inMode(item, mode.value);
+  // Пресс — цена за штуку крупно, цена пресса строкой ниже (решение владельца 2026-11-14).
+  const priced = perPiece(view);
+  // Одежда оптом — линейкой: размер не выбирают, состав линейки — описанием (решение владельца 2026-11-14).
+  const line = (mode.value ?? only) === 'WHOLESALE' ? item.line : undefined;
   // «В розницу» / «Оптом» — и сразу к блоку о выбранном: цене штуки или условиям опта (2026-10-30).
   const scrollTo = useRef<SaleMode | null>(null);
   useEffect(() => {
@@ -294,11 +330,29 @@ function Decision({ item, categoryName }: { item: ShowcaseCardDto; categoryName?
 
   // Подложка пилюли — единственное, что решается здесь; чем «наличие
   // уточняется» отличается от «нет в наличии», знает StockNote.
-  const stockTint = (item.available != null ? item.available > 0 : item.stock === 'IN_STOCK')
+  // «Свободно: N» — в единицах выбранной заявки (просьба владельца 2026-11-15): одежда оптом — полными
+  // линейками (по самому скудному размеру), розница — штуками открытого размера. Голое «6» читалось двояко.
+  const inLines = !!line && line.availableLines != null && item.available != null;
+  const free = inLines ? line.availableLines : item.available;
+  const freeText = free == null ? undefined
+    // Линейка — несколько штук размерного ряда: рядом штуки всех линеек, «6 линеек (18 шт.)» — иначе неясно, много ли это.
+    : inLines ? `${t('cart.lines.unitCount', { count: free })} (${quantityWithUnit(free * line.pieces, item.wholesale?.pieceUnit ?? item.unit)})`
+      : quantityWithUnit(free, item.unit);
+  const stockTint = (free != null ? free > 0 : item.stock === 'IN_STOCK')
     ? 'bg-in-stock/10'
     : item.stock === 'UNKNOWN'
       ? 'bg-unclear/10'
       : 'bg-canvas';
+  const unitNote = (
+    <span className="text-sm font-semibold text-ink-muted md:text-base">
+      {t('catalog.priceNote.perUnit', { unit: unitPer(priced.unit) })}
+    </span>
+  );
+  const savingChip = view.oldPrice != null ? (
+    <span className="ml-1.5 flex h-7 items-center self-center rounded-[var(--radius-pill)] bg-sale-soft px-2.5 text-sm font-extrabold text-sale-ink first-letter:uppercase">
+      {t('catalog.saving', { amount: money(view.oldPrice - view.price, currency) })}
+    </span>
+  ) : null;
   const stockKnown = item.available != null || item.stock != null;
   const noveltySince = item.terms?.noveltySince
     ? shortDate(`${item.terms.noveltySince}T12:00:00`)
@@ -350,8 +404,8 @@ function Decision({ item, categoryName }: { item: ShowcaseCardDto; categoryName?
           </h1>
           <PageHelp className="shrink-0 max-md:hidden" />
         </div>
-        {/* Артикул цвета — как «Арт.» у магазинов одежды: другой цвет — другая карточка и другой артикул. */}
-        {item.article ? <span className="text-sm text-ink-subtle">{t('item.article', { article: item.article })}</span> : null}
+        {/* Артикулы цветов модели — как «Арт.» у Спортмастера: открытый цвет первым (решение владельца 2026-11-14). */}
+        <ModelArticles item={item} />
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -361,35 +415,35 @@ function Decision({ item, categoryName }: { item: ShowcaseCardDto; categoryName?
           где рядом лежит цена за тонну. Цифры табличные, чтобы цена не дёргалась.
         */}
         <div data-testid="item-price" className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          {/* Скидка: старая цена зачёркнута красной линией, новая — зелёным под ней (2026-10-30). */}
-          {dealOf(view) ? (
-            <DealPrice item={view} oldSize="text-base md:text-xl"
-              size="text-display leading-none md:text-hero lg:text-jumbo lg:font-black lg:tracking-[-0.03em]" />
-          ) : (
-            <span className="text-display font-extrabold tabular-nums leading-none tracking-[-0.02em] text-ink md:text-hero lg:text-jumbo lg:font-black lg:tracking-[-0.03em]">
-              {money(view.price, currency)}
-            </span>
-          )}
-          {dealOf(view)?.wholesale ? null : (
-            <span className="text-sm font-semibold text-ink-muted md:text-base">
-              {t('catalog.priceNote.perUnit', { unit: unitPer(view.unit) })}
-            </span>
-          )}
-          {view.oldPrice != null && (
+          {/* Скидка: старая цена зачёркнута красной линией, новая — зелёным под ней (2026-10-30).
+              «за кг» и выгода — справа от новой цены: снаружи блока скидки они вставали
+              на базовую линию зачёркнутой цены и висели над ценой. */}
+          {dealOf(priced) ? (
+            <DealPrice item={priced} oldSize="text-base md:text-xl"
+              size="text-display leading-none md:text-hero lg:text-jumbo lg:font-black lg:tracking-[-0.03em]"
+              note={<>{unitNote}{savingChip}</>} />
+          ) : null}
+          {/* У скидки опта своя подпись внутри DealPrice, note она не берёт — выгода рядом. */}
+          {dealOf(priced)?.wholesale ? savingChip : null}
+          {dealOf(priced) ? null : (
             <>
-              <span className="flex h-7 items-center self-center rounded-[var(--radius-pill)] bg-sale-soft px-2.5 text-sm font-extrabold text-sale-ink first-letter:uppercase">
-                {t('catalog.saving', { amount: money(view.oldPrice - view.price, currency) })}
+              <span className="text-display font-extrabold tabular-nums leading-none tracking-[-0.02em] text-ok-ink md:text-hero lg:text-jumbo lg:font-black lg:tracking-[-0.03em]">
+                {money(priced.price, currency)}
               </span>
+              {unitNote}
+              {savingChip}
             </>
           )}
         </div>
+        <PressNote press={priced.press} className="text-sm" />
         {item.yourPrice ? (
           <p data-testid="item-your-price" className="text-sm font-semibold text-accent">{t('catalog.yourPriceNote')}</p>
         ) : null}
         {terms && <p className="text-sm text-ink-subtle">{terms}</p>}
       </div>
 
-      {view.discountPercent ? <SaleParticipation /> : null}
+      {/* Акция того вида, в котором смотрят карточку: у «только опт» — оптовая, даже если каталог в «В розницу». */}
+      {view.discountPercent ? <SaleParticipation mode={mode.value ?? only} /> : null}
 
       <div className="flex flex-wrap items-center gap-2">
         {stockKnown && (
@@ -397,7 +451,7 @@ function Decision({ item, categoryName }: { item: ShowcaseCardDto; categoryName?
             data-testid="stock-pill"
             className={cn('inline-flex h-[34px] items-center rounded-[var(--radius-pill)] px-3 [&>span]:mt-0', stockTint)}
           >
-            <StockNote stock={item.stock} available={item.available} />
+            <StockNote stock={item.stock} available={free} amount={freeText} />
           </span>
         )}
         {item.stock === 'OUT_OF_STOCK' ? <RestockButton itemId={item.id} /> : null}
@@ -416,26 +470,22 @@ function Decision({ item, categoryName }: { item: ShowcaseCardDto; categoryName?
             // цена выбранного способа — крупно над переключателем, условия опта — блоком после «Оптом».
             onPick={(next) => (next === mode.value ? showBlockOf(next) : (scrollTo.current = next))} />
         ) : null}
-        {only && twoWays ? (
-          <div className="flex flex-col gap-2">
-            <ModeSwitch value={orderMode} onChange={setOrderMode} />
-            {orderMode !== only ? (
-              <p role="status" className="rounded-[var(--radius-control)] bg-sunk px-3 py-2 text-sm font-semibold text-ink">
-                {t(`cart.mode.only.${only}`)}
-              </p>
-            ) : null}
-          </div>
-        ) : null}
         {(item.variants ?? []).length > 1 && (
           <VariantPicker
             itemId={item.id}
             variants={item.variants}
-            sizeAction={item.sizeGuide && <SizeGuide kind={item.sizeGuide} onAsk={ask} />}
+            grid={gridOf(item)}
+            sizeAction={item.sizeGuide && <SizeGuide kind={item.sizeGuide} onAsk={ask} chart={item.sizeChart} grid={gridOf(item)} />}
+            chart={item.sizeChart}
+            hideSizes={!!item.line && (mode.value ?? (item.wholesale?.retail ? undefined : 'WHOLESALE')) === 'WHOLESALE'}
           />
         )}
+        {line ? (
+          <LineInfo line={line} currency={currency} chart={item.sizeChart} grid={gridOf(item)} retail={!!item.wholesale?.retail}
+            guide={item.sizeGuide && <SizeGuide kind={item.sizeGuide} onAsk={ask} chart={item.sizeChart} grid={gridOf(item)} />} />
+        ) : null}
         {item.pack ? <PackContents label={t('pack.inPress')} members={packMembers(item.pack)} /> : null}
         <Purchase item={item} mode={mode.value} />
-        <SizeGrid item={item} mode={mode.value} />
       </div>
 
       <DealFacts />
@@ -488,6 +538,9 @@ const STEPS = {
 } as const satisfies Record<SizeGuideKind, readonly string[]>;
 
 type MeasureStep = (typeof STEPS)[SizeGuideKind][number];
+
+/** Мерка таблицы продавца → шаг подсказки: при таблице одежды объясняем только то, что в ней есть. */
+const STEP_OF_MEASURE: Partial<Record<string, MeasureStep>> = { CHEST: 'chest', WAIST: 'waist', HIPS: 'hips', INSEAM: 'inseam' };
 
 /** Вступление к меркам: у каждого вида своё — стопу мерят вечером, голову без шапки. */
 const INTRO: Record<SizeGuideKind, string> = {
@@ -576,13 +629,76 @@ function MeasureSchema({ kind, step, large = false }: { kind: SizeGuideKind; ste
  * стопу, у головного убора — голову. Без его ответа подсказки нет вовсе:
  * мерки одежды у кроссовок учили бы не тому.
  */
-function SizeGuide({ kind, onAsk }: { kind: SizeGuideKind; onAsk: () => void }) {
+/**
+ * Что входит в одну линейку — справкой в «Оптом»: размеры со штуками и цена линейки.
+ * Размер здесь не выбирают — оптом одежда только линейкой; таблица размеров — ссылкой рядом.
+ */
+// Сетка модели (WOMEN/MEN/UNISEX) — от сервера по полю «Для кого»; у детского и не одежды пусто.
+const gridOf = (item: ShowcaseCardDto) => item.sizeGrid as ClothingGrid | undefined;
+
+function LineInfo({ line, currency, guide, chart, grid, retail }: {
+  line: CardLineDto; currency: Currency | undefined; guide?: ReactNode; chart?: SizeChartDto; grid?: ClothingGrid; retail: boolean;
+}) {
+  const { t } = useTranslation();
+  // Таблицей сразу в трёх системах — RUS, INT, EUR (просьба владельца 2026-11-14). Столбца, где нет
+  // ни одного значения ни у продавца, ни по сетке, нет.
+  const rows = line.sizes.map((size) => sizeRow(size.label, chart, grid));
+  const systems = (['RUS', 'INT', 'EUR'] as const).filter((system) => system === 'RUS' || rows.some((row) => row[system]));
+  const cell = 'px-2.5 py-1.5 text-center whitespace-nowrap';
+  return (
+    <section aria-label={t('item.line.title')} data-testid="card-line"
+      className="flex flex-col gap-2 rounded-[var(--radius-control)] bg-sunk p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-body font-bold text-ink">{t('item.line.title')}</h2>
+        {guide}
+      </div>
+      <div className="overflow-x-auto rounded-[var(--radius-small)] bg-surface shadow-[0_0_0_1px_var(--color-hairline)]">
+        <table className="w-full border-collapse text-sm tabular-nums" data-testid="card-line-table">
+          <caption className="sr-only">{t('item.line.tableCaption', { systems: systems.join(', ') })}</caption>
+          <thead>
+            <tr className="bg-sunk text-caption font-bold text-ink-muted">
+              {systems.map((system) => <th key={system} scope="col" className={cell}>{system}</th>)}
+              <th scope="col" className={cn(cell, 'text-right')}>{t('item.line.inLine')}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {line.sizes.map((size, row) => (
+              <tr key={size.label} className={cn('border-t border-hairline', size.missing ? 'text-ink-subtle' : 'text-ink')}>
+                {systems.map((system, index) => {
+                  const value = rows[row][system] ?? '—';
+                  return index === 0 ? (
+                    <th key={system} scope="row" className={cn(cell, 'font-extrabold', size.missing && 'line-through')}>{value}</th>
+                  ) : (
+                    <td key={system} className={cn(cell, size.missing && 'line-through')}>{value}</td>
+                  );
+                })}
+                <td className={cn(cell, 'text-right font-semibold')}>
+                  {size.missing ? t('item.line.missing') : t('item.line.pieces', { count: size.quantity })}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="m-0 text-sm text-ink">
+        {t('item.line.price', { pieces: line.pieces, price: money(line.linePrice, currency) })}
+      </p>
+      {/* «Отдельные размеры — в розницу» — только если товар в розницу продаётся (2026-11-15). */}
+      <p className="m-0 text-caption text-ink-muted">{t(retail ? 'item.line.rule' : 'item.line.ruleOnly')}</p>
+    </section>
+  );
+}
+
+function SizeGuide({ kind, onAsk, chart, grid }: { kind: SizeGuideKind; onAsk: () => void; chart?: SizeChartDto; grid?: ClothingGrid }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   // Мелкая схема рядом с текстом читается с трудом: нажатая мерка показывает
   // свою крупно. Крупной бывает одна за раз — иначе окно ушло бы в прокрутку.
   const [enlarged, setEnlarged] = useState<MeasureStep | null>(null);
-  const steps: readonly MeasureStep[] = STEPS[kind];
+  // У куртки с таблицей «грудь, талия, рост» не учим мерить бёдра и шаговый шов (QA 2026-11-14).
+  const steps: readonly MeasureStep[] = kind === 'CLOTHING' && chart
+    ? STEPS.CLOTHING.filter((step) => chart.rows.some((row) => STEP_OF_MEASURE[row.measure] === step))
+    : STEPS[kind];
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
@@ -591,21 +707,22 @@ function SizeGuide({ kind, onAsk }: { kind: SizeGuideKind; onAsk: () => void }) 
           className="qo-hit inline-flex min-h-8 items-center gap-1.5 text-sm font-bold text-accent-ink underline-offset-[3px] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         >
           <Ruler aria-hidden="true" className="size-4" />
-          {t('item.sizeGuide.link')}
+          {chart ? t('item.sizeChart.link') : t('item.sizeGuide.link')}
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="qo-scrim fixed inset-0 z-40 bg-ink/45 dark:bg-black/60" />
         <Dialog.Content
-          aria-describedby="size-guide-text"
+          aria-describedby={steps.length > 0 ? 'size-guide-text' : undefined}
           className={cn(
-            'qo-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2',
+            'qo-dialog fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] -translate-x-1/2 -translate-y-1/2',
+            chart ? 'w-[min(48rem,calc(100vw-2rem))]' : 'w-[min(28rem,calc(100vw-2rem))]',
             'flex-col gap-3 overflow-y-auto rounded-[calc(var(--radius-gallery)*7/6)] bg-surface p-6 shadow-float',
           )}
         >
           <div className="flex items-start justify-between gap-3">
             <Dialog.Title className="text-xl font-extrabold tracking-[-0.02em] text-ink">
-              {t('item.sizeGuide.title')}
+              {chart ? t('item.sizeChart.title') : t('item.sizeGuide.title')}
             </Dialog.Title>
             <Dialog.Close
               aria-label={t('item.sizeGuide.close')}
@@ -614,7 +731,10 @@ function SizeGuide({ kind, onAsk }: { kind: SizeGuideKind; onAsk: () => void }) 
               <X aria-hidden="true" className="size-5" />
             </Dialog.Close>
           </div>
-          <p id="size-guide-text" className="text-body leading-normal text-ink-muted">{t(`item.sizeGuide.${INTRO[kind]}`)}</p>
+          {/* Таблица размеров модели от продавца — над «как определить размер» (2026-11-14). */}
+          {chart ? <SizeChartTable chart={chart} grid={grid} /> : null}
+          {chart && steps.length > 0 ? <h3 className="m-0 mt-2 text-lead font-extrabold text-ink">{t('item.sizeChart.howTo')}</h3> : null}
+          {steps.length > 0 ? <p id="size-guide-text" className="text-body leading-normal text-ink-muted">{t(`item.sizeGuide.${INTRO[kind]}`)}</p> : null}
           {/*
             Окно с раскрытой меркой обязано помещаться без прокрутки: строки
             разделяет их собственная подсветка, а не промежуток, и крупная
@@ -675,11 +795,12 @@ const GHOST = cn(
 function PhotoStickers({ item: card }: { item: ShowcaseCardDto }) {
   const { t } = useTranslation();
   // Наклейки выбранной заявки: распродажа розницы не висит на оптовой цене, и наоборот.
-  const item = inMode(card, useOrderMode()[0]);
+  // Товар одного способа не слушает «Оптом / В розницу» в шапке — у него свой способ (2026-11-14).
+  const item = inMode(card, useSaleMode(card).value);
   if (!item.terms?.ageRestricted && !item.discountPercent) return null;
   return (
     <div className="flex gap-1 pt-1">
-      {item.terms?.ageRestricted && <span className={cn(TINY_BADGE, 'bg-adult text-white')}>{t('catalog.badge.adult')}</span>}
+      {item.terms?.ageRestricted && <span className={cn(TINY_BADGE, 'bg-adult text-white')}>{t('catalog.badge.adult', { age: item.terms?.minAge ?? 21 })}</span>}
       {item.discountPercent ? <span data-testid="discount-sticker" className={cn(TINY_BADGE, 'bg-sale text-on-sale')}>−{item.discountPercent}%</span> : null}
     </div>
   );
@@ -688,7 +809,8 @@ function PhotoStickers({ item: card }: { item: ShowcaseCardDto }) {
 function PhotoBadges({ item: card }: { item: ShowcaseCardDto }) {
   const { t } = useTranslation();
   // Метки выбранной заявки: в «Оптом» — «Оптом», без «Скидки» на опт против розницы.
-  const item = inMode(card, useOrderMode()[0]);
+  // Товар одного способа не слушает «Оптом / В розницу» в шапке — у него свой способ (2026-11-14).
+  const item = inMode(card, useSaleMode(card).value);
   const terms = item.terms;
   // Цвет и значок признака — те же, что у фильтров каталога и меток на плитке.
   return (
@@ -726,7 +848,9 @@ const LINK = 'lg:min-h-0 lg:border-transparent lg:px-0 lg:py-1 lg:text-sm lg:fon
 // На телефоне — одной строкой (макет К2.3): количество и кнопка с суммой.
 const PHONE_BAR = cn(
   // Телефон: кнопка — отдельной строкой во всю ширину; в строку со счётчиком «В корзину · сумма» обрезалось до «В кор…».
-  'flex flex-col items-stretch gap-3 lg:flex-row lg:items-center lg:gap-5',
+  // Монитор: счётчик и сумма — одной группой, кнопка рядом; не помещается (1024 лёжа) — кнопка своей строкой
+  // во всю ширину, а не сумма под счётчиком (QA 2026-11-15).
+  'flex flex-col items-stretch gap-3 lg:flex-row lg:flex-wrap lg:items-center lg:gap-x-5 lg:gap-y-3',
   // Не прибита к низу: на телефоне прокручивается вся страница (решение владельца 2026-11-04).
 );
 
@@ -744,11 +868,213 @@ function showBlockOf(mode: SaleMode) {
 function useSaleMode(item: ShowcaseCardDto) {
   // Режим — общий с каталогом и корзиной («Вариант Б»: оптовая и розничная заявки раздельно).
   const [chosen, setChosen] = useOrderMode();
-  const choice = !!item.wholesale?.retail && !item.yourPrice;
+  const choice = !!item.wholesale?.retail;
   return { value: choice ? chosen : undefined, change: setChosen };
 }
 
 function Purchase({ item, mode }: { item: ShowcaseCardDto; mode?: SaleMode }) {
+  // Одежда оптом — линейками (решение владельца 2026-11-14): своя покупка, без штучного счётчика.
+  const lineTier = item.wholesale?.linePieces && (mode === 'WHOLESALE' || !item.wholesale.retail)
+    ? item.wholesale.tiers[0] : undefined;
+  if (lineTier) return <LinePurchase item={item} from={lineTier.from} />;
+  return <PiecePurchase item={item} mode={mode} />;
+}
+
+/** Покупка линейкой: «В корзину» кладёт первую ступень линеек, дальше — счётчик линеек. */
+function LinePurchase({ item, from }: { item: ShowcaseCardDto; from: number }) {
+  const { t } = useTranslation();
+  const currency = useSupplierCurrency();
+  const cart = cartOf(useCart().data);
+  const { add, isPending } = useAddToCart();
+  const taken = linesIn(cart, item.id);
+  const setLines = useWholesaleLines();
+  // Выбранный вариант до корзины; в корзине выбор сразу меняет число линеек.
+  const [wanted, setWanted] = useState(from);
+  const pick = (lines: number) => (taken > 0 ? setLines.mutate({ itemId: item.id, data: { lines } }) : setWanted(lines));
+  const chosen = taken > 0 ? taken : wanted;
+  const choices = lineChoices(item);
+  // Сумма — как у штучной покупки: до корзины — первая ступень линеек, в корзине — строки этой линейки.
+  const linePrice = item.line?.linePrice ?? item.wholesale?.tiers[0]?.price ?? 0;
+  const inCart = (cart?.lines ?? []).filter((one) => one.line?.sizes.some((size) => size.itemId === item.id))
+    .reduce((sum, one) => sum + (one.total ?? 0), 0);
+  // Только полные линейки: каждого размера должно хватить на все линейки (требование 2026-11-15).
+  const available = item.line?.availableLines;
+  const short = available != null && available < Math.max(from, taken > 0 ? 0 : wanted);
+  return (
+    <div className="flex flex-col gap-3" data-testid="line-purchase">
+      {choices.length > 0 ? <LineTiers item={item} choices={choices} chosen={chosen} onPick={pick} maxLines={available} /> : null}
+      {available != null ? (
+        <p data-testid="line-available" className={cn('m-0 text-sm font-semibold', short ? 'text-ink' : 'text-ink-muted')}>
+          {available === 0 ? t('item.line.none')
+            : available < from ? t('item.line.belowMin', { count: available, from })
+            : t('item.line.available', { count: available })}
+        </p>
+      ) : null}
+      {taken > 0 ? (
+        <div data-purchase-bar="" className={PHONE_BAR}>
+          <LineQuantity itemId={item.id} minLines={from} maxLines={available} className="lg:w-[14rem]" />
+          <Link to="/checkout" className="flex h-13 w-full min-w-0 items-center justify-center gap-2.5 rounded-[1rem] bg-accent px-3 text-body font-bold text-on-accent no-underline hover:opacity-90 lg:w-auto lg:px-7 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+            {t('item.inCartSum', { sum: money(inCart, currency) })}
+          </Link>
+        </div>
+      ) : (
+        <Button variant="accent" size="xl" disabled={isPending || short}
+          className="h-13 w-full gap-2 rounded-[1rem] text-body lg:h-14"
+          onClick={async (event) => {
+            const shot = document.querySelector('[data-testid="gallery-photo"]') ?? event.currentTarget;
+            const added = await add(item, wanted, 'WHOLESALE');
+            if (added) flyToCart(shot);
+          }}>
+          {t('cart.lines.toCart')} · {money(choices.find((one) => one.lines === wanted)?.sum ?? linePrice * wanted, currency)}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+interface LineChoice {
+  /** Сколько линеек */
+  lines: number;
+  /** Штук во всех линейках */
+  pieces: number;
+  /** Цена штуки по ступени этого числа линеек */
+  piece: number;
+  /** Цена одной линейки по этой ступени */
+  line: number;
+  /** Сумма за все линейки */
+  sum: number;
+  /** Цена линейки до распродажи опта; пусто — распродажи нет */
+  oldLine?: number;
+}
+
+/**
+ * Варианты покупки линейками — как прежние ступени опта у штучного товара (просьба владельца 2026-11-14):
+ * ступени продавца, а если их меньше трёх — дополняются 1, 3 и 5 линейками по действующей ступени.
+ * Цены — от цены линейки карточки (`item.line`): в ней уже распродажа и недостающие размеры.
+ */
+function lineChoices(item: ShowcaseCardDto): LineChoice[] {
+  const wholesale = item.wholesale;
+  const first = wholesale?.tiers[0];
+  if (!wholesale || !first || first.price <= 0) return [];
+  const counts = new Set(wholesale.tiers.map((tier) => tier.from));
+  for (const extra of [1, 3, 5]) if (counts.size < 3 && extra >= first.from) counts.add(extra);
+  // Цена линейки карточки — первой ступени; прочие ступени — в той же доле от цены продавца.
+  const share = (item.line?.linePrice ?? first.price) / first.price;
+  const pieces = item.line?.pieces ?? wholesale.linePieces ?? wholesale.packQty;
+  return [...counts].sort((a, b) => a - b).map((lines) => {
+    const tier = tierFor(wholesale.tiers, lines) ?? first;
+    const line = Math.round(tier.price * share);
+    return {
+      lines,
+      pieces: lines * pieces,
+      piece: pieces > 0 ? Math.round(line / pieces) : line,
+      line,
+      sum: line * lines,
+      oldLine: tier.oldPrice === undefined ? undefined : Math.round(tier.oldPrice * share),
+    };
+  });
+}
+
+/**
+ * Выбор, сколько линеек брать: у каждого варианта — штуки, цена штуки крупно, выгода против розницы,
+ * цена линейки и сумма. Нажатие — до корзины в кнопку «В корзину», в корзине — сразу числом линеек.
+ */
+function LineTiers({ item, choices, chosen, onPick, maxLines }: {
+  item: ShowcaseCardDto; choices: LineChoice[]; chosen: number; onPick: (lines: number) => void; maxLines?: number | null;
+}) {
+  const { t } = useTranslation();
+  const currency = useSupplierCurrency();
+  const best = choices.find((choice) => choice.lines === chosen) ?? choices[0];
+  // Подсказка «ещё N линеек — дешевле» — только до ступени, которую хватит остатка взять.
+  const next = choices.find((choice) => choice.lines > chosen && choice.piece < best.piece
+    && (maxLines == null || choice.lines <= maxLines));
+  const retail = item.wholesale?.retail && item.price > 0 ? item.price : undefined;
+  const base = choices[0];
+  // Цена одна при любом числе линеек — так и сказать, чтобы три одинаковые цены не читались ошибкой.
+  const flat = choices.every((choice) => choice.piece === base.piece);
+  const perLine = base.lines > 0 ? base.pieces / base.lines : 0;
+  return (
+    <section data-testid="line-tiers" aria-labelledby="line-tiers-title"
+      className="flex flex-col gap-2.5 rounded-[var(--radius-tile)] bg-sunk p-3.5">
+      <h3 id="line-tiers-title" className="text-body font-bold text-ink">{t('item.lineTiers.title')}</h3>
+      <p className="-mt-1 text-caption text-ink-muted">
+        {t('item.lineTiers.hint', { pieces: perLine })}
+        {flat ? ` ${t('item.lineTiers.flat')}` : ''}
+      </p>
+      <ul aria-label={t('item.lineTiers.title')} className="m-0 flex list-none flex-col gap-2 p-0">
+        {choices.map((choice) => {
+          const on = choice.lines === chosen;
+          const percent = retail ? Math.round((1 - choice.piece / retail) * 100) : 0;
+          // Выгода против первого варианта — та же покупка по цене первой ступени.
+          const saved = base.piece * choice.pieces - choice.sum;
+          // Подпись слева — одной строкой: на телефоне «Цена за 1 / шт» рвалась (замечание portal-1a 2026-11-14).
+          const row = 'flex items-baseline justify-between gap-3 [&>span:first-child]:whitespace-nowrap';
+          return (
+            <li key={choice.lines} data-testid="line-tier" aria-current={on ? 'true' : undefined}>
+              <button type="button" onClick={() => onPick(choice.lines)} disabled={maxLines != null && choice.lines > maxLines}
+                className={cn(
+                  'flex w-full flex-col gap-2 rounded-[var(--radius-control)] p-3 text-left transition-colors duration-200 disabled:pointer-events-none disabled:opacity-45',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                  on ? 'bg-accent-soft shadow-[0_0_0_2px_var(--color-accent)]' : 'bg-surface shadow-[0_0_0_1px_var(--color-hairline)] hover:bg-accent-soft/50',
+                )}>
+                <span className="flex items-center gap-3">
+                  <span className={cn('flex size-5 shrink-0 items-center justify-center rounded-full',
+                    on ? 'bg-accent text-on-accent' : 'shadow-[inset_0_0_0_1.5px_var(--color-hairline)]')}>
+                    {on ? <Check aria-hidden="true" className="size-3.5" /> : null}
+                  </span>
+                  <span className={cn('flex-1 text-lead font-extrabold', on ? 'text-accent-ink' : 'text-ink')}>
+                    {t('cart.lines.unitCount', { count: choice.lines })}
+                  </span>
+                </span>
+                <span className="flex flex-col gap-1 border-t border-hairline pt-2 text-sm tabular-nums">
+                  <span className={row}>
+                    <span className="text-ink-muted">{t('item.lineTiers.piecesLabel')}</span>
+                    <span className="font-semibold text-ink">
+                      {t('item.lineTiers.pieces', { pieces: choice.pieces })}
+                      {choice.lines > 1 ? <span className="font-normal text-ink-muted"> ({choice.lines} × {perLine})</span> : null}
+                    </span>
+                  </span>
+                  <span className={row}>
+                    <span className="text-ink-muted">{t('item.lineTiers.pieceLabel')}</span>
+                    <span className="font-semibold text-ink">{money(choice.piece, currency)}</span>
+                  </span>
+                  {/* Выгода против розницы — своей строкой под ценой: в строке цены на телефоне она рвалась и налезала. */}
+                  {percent > 0 ? (
+                    <span className="self-end whitespace-nowrap rounded-full bg-sale-soft px-2 text-caption font-bold text-sale-ink">
+                      {t('item.lineTiers.belowRetail', { percent })}
+                    </span>
+                  ) : null}
+                  <span className={row}>
+                    {/* «Цена за 3 линейки» — за все линейки варианта (просьба владельца 2026-11-14). */}
+                    <span className="text-ink-muted">{t('item.lineTiers.linesPrice', { count: choice.lines })}</span>
+                    <span className="font-semibold text-wholesale-ink">
+                      {choice.oldLine !== undefined && <s className="mr-1.5 font-normal text-ink-faint">{money(choice.oldLine * choice.lines, currency)}</s>}
+                      {money(choice.sum, currency)}
+                    </span>
+                  </span>
+                  {saved > 0 ? (
+                    <span className={row}>
+                      <span className="text-ink-muted">{t('item.lineTiers.savedLabel')}</span>
+                      <span className="font-bold text-sale-ink">{money(saved, currency)}</span>
+                    </span>
+                  ) : null}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {next ? (
+        <p data-testid="line-tiers-next" className="flex items-center gap-2 text-caption font-semibold text-accent-ink">
+          <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
+          {t('item.lineTiers.next', { count: next.lines - chosen, price: money(next.piece, currency) })}
+        </p>
+      ) : null}
+    </section>
+  );
+}
+
+function PiecePurchase({ item, mode }: { item: ShowcaseCardDto; mode?: SaleMode }) {
   const { t } = useTranslation();
   const currency = useSupplierCurrency();
   const cart = cartOf(useCart().data);
@@ -762,17 +1088,31 @@ function Purchase({ item, mode }: { item: ShowcaseCardDto; mode?: SaleMode }) {
   // Только строка этой заявки: взятое в розницу не показывается лежащим в опте.
   const inCart = lineOf(cart, item.id, mode)?.quantity;
   const ordered = inCart === undefined ? undefined : inCart / perPack;
-  const [wanted, setWanted] = useState(() => firstQuantity(item.terms));
+  // В «Оптом» у товара «оптом и в розницу» сразу одна упаковка первой ступени: иначе в счётчике стоял минимум
+  // розницы, и «В корзину» клало его по розничной цене (просьба владельца 2026-11-15).
+  const packStart = mode === 'WHOLESALE' && wholesale && !only && wholesale.packQty > 1 && wholesale.tiers[0]
+    // Без подгонки под кратность розницы: «по 3 шт.» из 10 пар упаковки сделало бы 12 — упаковка и 2 пары в розницу.
+    ? wholesale.tiers[0].from * wholesale.packQty : undefined;
+  // В «Оптом» счётчик шагает упаковками: «по 3 шт.» розницы делал из 5 упаковок 51 шт., а «−» — 4 упаковки и 8 шт.
+  const counterTerms = packStart !== undefined && wholesale
+    ? { ...item.terms, minQuantity: wholesale.packQty, quantityStep: wholesale.packQty } : item.terms;
+  const start = packStart ?? firstQuantity(item.terms);
+  const [wanted, setWanted] = useState(start);
+  // Переключили «В розницу» ↔ «Оптом» до корзины — счётчик встаёт на начало выбранной заявки.
+  // Зависимость — число, а не `item.terms`: новый объект при каждом обновлении карточки сбрасывал счётчик.
+  useEffect(() => {
+    setWanted(start);
+  }, [start]);
   const amount = ordered ?? wanted;
   const setLine = useSetCartLine();
   // Нажатая ступень: до корзины — в счётчик, уже в корзине — сразу строкой корзины.
   const pick = (tierPieces: number) => {
-    const next = fitQuantity(tierPieces / perPack, item.terms);
+    const next = fitQuantity(tierPieces / perPack, counterTerms);
     if (ordered === undefined) setWanted(next);
     else setLine.mutate({ itemId: item.id, data: { quantity: next * perPack, mode } });
   };
   const pieces = toPieces(item, amount);
-  const split = wholesale ? splitOf(wholesale, pieces, only ? undefined : item.price) : undefined;
+  const split = wholesale ? splitOf(wholesale, pieces) : undefined;
   // Сумма — тем же разбиением, что посчитает корзина: упаковки по ступени, остаток в розницу.
   const sum = split?.tier
     ? split.packs * split.tier.price + (only ? 0 : split.rest * item.price)
@@ -801,8 +1141,8 @@ function Purchase({ item, mode }: { item: ShowcaseCardDto; mode?: SaleMode }) {
           {t('item.added', { amount: quantityWithUnit(ordered, item.unit) })}
         </p>
         <div data-purchase-bar="" className={PHONE_BAR}>
-          <div className="flex items-center justify-center gap-3 lg:flex-1 lg:flex-wrap lg:justify-start">
-            <QuantityField itemId={item.id} unit={item.unit} terms={item.terms} perPack={perPack} mode={mode}
+          <div className="flex items-center justify-center gap-3 lg:flex-[1_0_auto] lg:justify-start">
+            <QuantityField itemId={item.id} unit={item.unit} terms={counterTerms} perPack={perPack} mode={mode}
               className="h-13 w-[9.5rem] flex-none lg:w-[12.5rem]" />
             <Sum amount={sum} />
           </div>
@@ -810,7 +1150,7 @@ function Purchase({ item, mode }: { item: ShowcaseCardDto; mode?: SaleMode }) {
             to="/checkout"
             aria-label={t('item.toCart')}
             className={cn(
-              'flex h-13 w-full min-w-0 items-center justify-center gap-2.5 rounded-[1rem] bg-accent px-3 lg:h-14 lg:w-auto lg:flex-none lg:bg-ink lg:px-7',
+              'flex h-13 w-full min-w-0 items-center justify-center gap-2.5 rounded-[1rem] bg-accent px-3 lg:h-14 lg:w-auto lg:flex-[1_0_auto] lg:bg-ink lg:px-7',
               // Надпись — парная заливке: на телефоне `on-accent`, на мониторе `on-ink`. Белая
               // ночью не читалась на светлом акценте, а `night` сливался с тёмной карточкой.
               'text-body font-bold text-on-accent lg:text-on-ink transition-opacity duration-200 hover:opacity-90 lg:text-lead',
@@ -831,8 +1171,8 @@ function Purchase({ item, mode }: { item: ShowcaseCardDto; mode?: SaleMode }) {
       {wholesale && <WholesaleTerms item={item} wholesale={wholesale} pieces={pieces} packs={split?.packs ?? 0} mode={mode} onPick={pick} />}
       {breakdown}
       <div data-purchase-bar="" className={PHONE_BAR}>
-        <div className="flex items-center justify-center gap-3 lg:flex-1 lg:flex-wrap lg:justify-start">
-          <LocalStepper value={wanted} unit={item.unit} terms={item.terms} onChange={setWanted} />
+        <div className="flex items-center justify-center gap-3 lg:flex-[1_0_auto] lg:justify-start">
+          <LocalStepper value={wanted} unit={item.unit} terms={counterTerms} onChange={setWanted} />
           <Sum amount={sum} />
         </div>
         <Button
@@ -843,7 +1183,7 @@ function Purchase({ item, mode }: { item: ShowcaseCardDto; mode?: SaleMode }) {
           variant="accent"
           size="xl"
           // На мониторе — в строку с количеством и суммой, цветом скидки, как корзина в шапке (ПК-К3).
-          className="h-13 w-full min-w-0 gap-2 rounded-[1rem] px-3 text-body lg:h-14 lg:w-auto lg:flex-none lg:rounded-[calc(var(--radius-tile)*1.125)] lg:bg-sale lg:px-7 lg:text-on-sale lg:hover:bg-sale-ink"
+          className="h-13 w-full min-w-0 gap-2 rounded-[1rem] px-3 text-body lg:h-14 lg:w-auto lg:flex-[1_0_auto] lg:rounded-[calc(var(--radius-tile)*1.125)] lg:bg-sale lg:px-7 lg:text-on-sale lg:hover:bg-sale-ink"
           disabled={isPending || wanted <= 0}
           // Имя кнопки — одно на любой ширине; сумма в подписи телефона — для глаз.
           aria-label={t('item.add')}
@@ -918,28 +1258,29 @@ function WholesaleTerms({ item, wholesale, pieces, packs, mode, onPick }: {
                   on ? 'bg-accent text-on-accent' : 'shadow-[inset_0_0_0_1.5px_var(--color-hairline)]')}>
                   {on ? <Check aria-hidden="true" className="size-3.5" /> : null}
                 </span>
-                <span className="flex min-w-0 flex-1 flex-col">
-                  <span className={cn('text-body font-bold', on ? 'text-accent-ink' : 'text-ink')}>
-                    {t('item.wholesale.tierFrom', { amount: quantityWithUnit(tier.from, wholesale.unit) })}
+                {/* Порог — одной строкой, а цены справа переносятся: на 360 «от 1 / упаковки» наезжало на зачёркнутую цену. */}
+                <span className="flex shrink-0 flex-col">
+                  <span className={cn('whitespace-nowrap text-body font-bold', on ? 'text-accent-ink' : 'text-ink')}>
+                    {fromQuantity(tier.from, wholesale.unit) ?? t('item.wholesale.tierFrom', { amount: quantityWithUnit(tier.from, wholesale.unit) })}
                   </span>
                   {packed ? (
                     <span className="text-caption text-ink-muted">{quantityWithUnit(tier.from * wholesale.packQty, wholesale.pieceUnit)}</span>
                   ) : null}
                 </span>
-                <span className="flex flex-col items-end tabular-nums">
-                  <span className="flex items-baseline gap-1.5">
+                <span className="flex min-w-0 flex-1 flex-col items-end text-right tabular-nums">
+                  <span className="flex flex-wrap items-baseline justify-end gap-x-1.5">
                     {percent > 0 ? (
                       <span className="rounded-full bg-sale-soft px-1.5 text-caption font-bold text-sale-ink">−{percent}%</span>
                     ) : null}
                     <span className={cn('text-lead font-extrabold', on ? 'text-accent-ink' : 'text-ink')}>
                       {money(unitPrice(tier.price), currency)}
                     </span>
-                    <span className="text-caption text-ink-muted">{t('catalog.priceNote.perUnit', { unit: unitPer(wholesale.pieceUnit) })}</span>
+                    <span className="whitespace-nowrap text-caption text-ink-muted">{t('catalog.priceNote.perUnit', { unit: unitPer(wholesale.pieceUnit) })}</span>
                   </span>
                   {packed ? (
-                    <span className="text-caption text-ink-muted">
-                      {tier.oldPrice !== undefined && <s className="mr-1.5 text-ink-faint">{money(tier.oldPrice, currency)}</s>}
-                      {t('item.wholesale.packPrice', { price: money(tier.price, currency), unit: unitPer(wholesale.unit) })}
+                    <span className="flex flex-wrap justify-end gap-x-1.5 text-caption text-ink-muted">
+                      {tier.oldPrice !== undefined && <s className="text-ink-faint">{money(tier.oldPrice, currency)}</s>}
+                      <span className="whitespace-nowrap">{t('item.wholesale.packPrice', { price: money(tier.price, currency), unit: unitPer(wholesale.unit) })}</span>
                     </span>
                   ) : tier.oldPrice !== undefined ? (
                     <s className="text-caption text-ink-faint">{money(tier.oldPrice, currency)}</s>
@@ -1064,60 +1405,37 @@ function LocalStepper({
 }
 
 /**
- * Условия сделки списком под кнопкой: платить сейчас не нужно и где забирать.
- * Адрес и часы — из реквизитов продавца; не назвал — строки нет. Скидки
- * стоят своей панелью ниже (`DiscountsPanel`).
+ * Под кнопкой — справкой, без акцента (просьба владельца 2026-11-14): что платить заранее не нужно
+ * и как можно получить — доставкой, самовывозом или и так и так. Адреса, цены и часы — при
+ * оформлении. Скидки стоят своей панелью ниже (`DiscountsPanel`).
  */
 function DealFacts() {
   const { t } = useTranslation();
-  const currency = useSupplierCurrency();
-  const shop = useCurrentShop();
-  const hours = hoursText(shop?.hours, t);
   const options = useGetPortalDeliveryOptions();
   const delivery = options.data?.status === 200 ? options.data.data : undefined;
-  // Доставка — карточкой, только если продавец возит: цену называет самое
-  // выгодное из настоящих условий, выдуманного обещания здесь нет.
-  const methods = (delivery?.methods ?? []).filter((method) => !method.pickup);
-  const free = methods.map((method) => method.freeFromAmount).filter((amount): amount is number => !!amount && amount > 0);
-  const prices = methods.map((method) => method.price).filter((price): price is number => price !== undefined);
-  const deliveryNote = free.length > 0
-    ? t('item.deal.freeFrom', { amount: money(Math.min(...free), currency) })
-    : prices.length > 0 ? t('item.deal.priceFrom', { amount: money(Math.min(...prices), currency) }) : t('item.deal.negotiable');
-  const point = delivery?.pickupPoints?.[0];
-  const pickupNote = point
-    ? [point.address ?? point.name, point.workingHours].filter(Boolean).join(' · ')
-    : [shop?.address, hours?.toLocaleLowerCase()].filter(Boolean).join(', ');
-  const card = 'flex items-center gap-3 rounded-[1.125rem] bg-surface px-4 py-3.5 shadow-[0_0_0_1px_var(--color-hairline)]';
-  const icon = 'size-6 shrink-0 text-accent-ink';
-
+  const methods = delivery?.methods ?? [];
+  const delivers = delivery?.mode !== 'PICKUP_ONLY' && methods.some((method) => !method.pickup);
+  const pickup = delivery?.mode === 'PICKUP_ONLY' || methods.some((method) => method.pickup)
+    || (delivery?.pickupPoints ?? []).length > 0;
+  const way = delivers && pickup ? 'both' : delivers ? 'delivery' : pickup ? 'pickup' : null;
+  const line = 'flex items-center gap-2 text-sm text-ink-muted';
   return (
-    <div className="flex flex-col gap-2.5">
-      {(methods.length > 0 || pickupNote) && (
-        <ul className="grid gap-2.5 sm:grid-cols-2">
-          {methods.length > 0 && (
-            <li data-testid="deal-delivery" className={card}>
-              <Truck aria-hidden="true" className={icon} />
-              <span className="flex min-w-0 flex-col">
-                <b className="text-sm font-extrabold text-ink">{t('item.deal.delivery')}</b>
-                <span className="text-caption text-ink-muted">{deliveryNote}</span>
-              </span>
-            </li>
-          )}
-          {pickupNote && (
-            <li data-testid="deal-pickup" className={card}>
-              <Store aria-hidden="true" className={icon} />
-              <span className="flex min-w-0 flex-col">
-                <b className="text-sm font-extrabold text-ink">{t('item.deal.pickup')}</b>
-                <span className="text-caption text-ink-muted">{pickupNote}</span>
-              </span>
-            </li>
-          )}
-        </ul>
-      )}
-      <p className="flex items-center gap-2 text-sm text-ink-muted">
+    <div className="flex flex-col gap-1.5">
+      <p className={line}>
         <ShieldCheck aria-hidden="true" className="size-[18px] shrink-0 text-accent-ink" />
         <span><b className="font-semibold text-ink">{t('item.factPayLabel')}</b> {t('item.factPay')}</span>
       </p>
+      {way ? (
+        // Ссылкой на «Доставку и самовывоз» (просьба владельца 2026-11-14) — там адреса, цены и часы.
+        <Link to="/delivery" data-testid="deal-way"
+          className={cn(line, 'self-start rounded-[var(--radius-control)] no-underline hover:text-ink hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent')}>
+          {way === 'pickup'
+            ? <Store aria-hidden="true" className="size-[18px] shrink-0 text-accent-ink" />
+            : <Truck aria-hidden="true" className="size-[18px] shrink-0 text-accent-ink" />}
+          {t(`item.deal.${way}`)}
+          <ChevronRight aria-hidden="true" className="size-4 shrink-0" />
+        </Link>
+      ) : null}
     </div>
   );
 }
@@ -1130,39 +1448,56 @@ function DealFacts() {
 function SpecPanel({
   item,
   properties,
+  wide,
 }: {
   item: ShowcaseCardDto;
-  properties: { key: string; name: string; value: string }[];
+  properties: { key: string; name: string; value: string; hex?: string }[];
+  /** Во всю ширину страницы — свойства в две колонки. */
+  wide: boolean;
 }) {
   const { t } = useTranslation();
-  const composition = compositionOf(properties);
+  const { parts: composition, key: compositionKey } = compositionOf(properties);
+  // Разобранный состав — только полосками «Из чего сделано»: строкой он повторял бы их (просьба владельца 2026-11-14).
+  const rows = composition.length >= 2 ? properties.filter((property) => property.key !== compositionKey) : properties;
   const panel = 'flex flex-col rounded-[calc(var(--radius-card)*13/11)] bg-surface px-5 py-5 shadow-[0_0_0_1px_var(--color-hairline)] lg:px-7 lg:py-6';
   return (
     <>
+      {item.description || rows.length > 0 ? (
       <div className={cn(panel, 'gap-1.5')}>
         <h2 id="attributes-heading" className="text-xl font-extrabold text-ink lg:text-2xl">{t('catalog.attributes')}</h2>
         {item.description && (
           <p className="whitespace-pre-line py-2 text-body leading-relaxed text-ink-muted">{item.description}</p>
         )}
-        {properties.length > 0 && (
+        {rows.length > 0 && (
           /*
             Список описаний, а не таблица: свойств у позиции от двух
             до двадцати, и таблица из двух строк выглядит поломкой вёрстки.
           */
-          <dl aria-labelledby="attributes-heading" className="flex flex-col">
-            {properties.map((property) => (
+          // На мониторе панель во всю ширину — свойства в две колонки; у нечётного
+          // последнего в левой колонке черта снизу лишняя, как у последнего в правой.
+          <dl aria-labelledby="attributes-heading"
+            className={cn('flex flex-col', wide && 'lg:grid lg:grid-cols-2 lg:gap-x-12 lg:[&>div:nth-last-child(2):nth-child(odd)]:border-b-0')}>
+            {rows.map((property) => (
               <div
                 key={property.key}
                 data-testid="item-property"
                 className="flex items-baseline justify-between gap-4 border-b border-hairline py-3.5 text-body last:border-b-0"
               >
                 <dt className="text-ink-muted">{property.name}</dt>
-                <dd className="text-right font-bold text-ink">{property.value}</dd>
+                <dd className="flex items-center gap-2 text-right font-bold text-ink">
+                  {/* Цвет — кружком цвета рядом со словом (просьба владельца 2026-11-14). */}
+                  {COLOUR.test(property.name) && (property.hex ?? colourOf(property.value)) ? (
+                    <span aria-hidden="true" data-testid="colour-dot" style={{ background: property.hex ?? colourOf(property.value) }}
+                      className="size-5 shrink-0 rounded-full shadow-[0_0_0_1px_var(--color-hairline)]" />
+                  ) : null}
+                  {property.value}
+                </dd>
               </div>
             ))}
           </dl>
         )}
       </div>
+      ) : null}
       {composition.length >= 2 && (
         <div className={cn(panel, 'gap-[18px]')}>
           <h3 className="text-lg font-extrabold text-ink">{t('item.composition')}</h3>
@@ -1192,6 +1527,32 @@ function SpecPanel({
   );
 }
 
+/**
+ * Где на мониторе стоят характеристики: под снимками (`beside`), если колонка
+ * решения выше снимков хотя бы на 400px, — иначе во всю ширину. Панель в одну
+ * колонку — обычно 450–600px: при меньшем перепаде она перерастала бы решение,
+ * и пустота справа выходила бы больше, чем под снимками.
+ * ponytail: порог на глаз; точнее — мерить саму панель в одну колонку.
+ */
+function useSpecBeside() {
+  const gallery = useRef<HTMLDivElement>(null);
+  const decision = useRef<HTMLDivElement>(null);
+  const [beside, setBeside] = useState(false);
+  useEffect(() => {
+    const left = gallery.current;
+    const right = decision.current;
+    if (!left || !right || typeof ResizeObserver === 'undefined') return;
+    // Только на мониторе (`lg`): на телефоне части идут подряд, и колонка там не нужна.
+    const wide = window.matchMedia('(min-width: 64rem)');
+    const measure = () => setBeside(wide.matches && right.offsetHeight - left.offsetHeight >= 400);
+    const observer = new ResizeObserver(measure);
+    observer.observe(left);
+    observer.observe(right);
+    return () => observer.disconnect();
+  }, []);
+  return { gallery, decision, beside };
+}
+
 /** Цвета долей состава: различимы и по светлоте, не только по оттенку. */
 const SHARE_COLORS = ['bg-accent', 'bg-star-soft', 'bg-[#E7A0AE]', 'bg-[#5B7FA6]', 'bg-ink-faint'];
 
@@ -1200,22 +1561,23 @@ const SHARE_COLORS = ['bg-accent', 'bg-star-soft', 'bg-[#E7A0AE]', 'bg-[#5B7FA6]
  * Только если сумма — сто процентов: иначе это не состав, а что-то похожее,
  * и полоски соврали бы.
  */
-function compositionOf(properties: { name: string; value: string }[]) {
+function compositionOf(properties: { key: string; name: string; value: string }[]) {
   const source = properties.find((property) => /^(состав|құрамы|composition)/i.test(property.name));
-  if (!source) return [];
+  if (!source) return { parts: [], key: undefined };
   const parts = [...source.value.matchAll(/([\p{L}][\p{L}\s-]*?)\s*(\d{1,3})\s*%/gu)]
     .map((match) => ({ name: match[1].trim().replace(/^\p{Ll}/u, (c) => c.toUpperCase()), percent: Number(match[2]) }));
   const sum = parts.reduce((total, part) => total + part.percent, 0);
-  return sum === 100 ? parts : [];
+  return { parts: sum === 100 ? parts : [], key: source.key };
 }
 
 /**
  * «Участвует в акции» — ссылкой на «Акции и скидки», с отсчётом до конца.
  * Только когда у товара есть скидка распродажи и распродажа идёт.
  */
-function SaleParticipation() {
+function SaleParticipation({ mode }: { mode?: SaleMode }) {
   const { t } = useTranslation();
-  const promotions = useGetPortalPromotions();
+  // Распродажи опта и розницы свои (2026-11-13): плашка — той, чья скидка в цене карточки (QA 2026-11-15).
+  const promotions = usePromotions(true, mode);
   const sale = promotions.data?.status === 200 ? promotions.data.data.sale : undefined;
   const left = useSaleCountdown(sale?.endsAt);
   if (!sale) return null;
@@ -1268,13 +1630,15 @@ function useSaleCountdown(endsAt: string | undefined) {
 function DiscountsPanel({ item }: { item: ShowcaseCardDto }) {
   const { t } = useTranslation();
   const currency = useSupplierCurrency();
-  const promotions = useGetPortalPromotions();
+  const promotions = usePromotions();
   const data = promotions.data?.status === 200 ? promotions.data.data : undefined;
   const cart = cartOf(useCart().data);
   if (!data) return null;
   const tier = data.volumeTiers[0];
   const first = data.firstOrder?.status === 'ELIGIBLE' ? data.firstOrder : undefined;
-  if (!item.discountPercent && !tier && !first) return null;
+  // Строка распродажи — только при акции магазина: скидка без акции (своя цена товара)
+  // давала пустой блок с одним заголовком.
+  if (!(item.discountPercent && data.sale) && !tier && !first) return null;
   const goods = cart?.goodsTotal ?? 0;
   // Ближайший порог считается здесь по самим порогам, а не по `cart.nextTier`:
   // тот приходит, только когда продавец включил подсказку в корзине и до
@@ -1438,7 +1802,7 @@ function SimilarCard({ entry: item }: { entry: ShowcaseItemDto }) {
           <span className="line-clamp-2 min-h-10 text-body font-semibold leading-snug text-ink">{entry.name}</span>
           <RatingBadge rating={entry.rating} reviewCount={entry.reviewCount} />
           <span className="flex flex-wrap items-baseline gap-2">
-            <span className={cn('text-lg font-extrabold tabular-nums lg:text-title', entry.oldPrice != null ? 'text-sale' : 'text-ink')}>
+            <span className={cn('text-lg font-extrabold tabular-nums lg:text-title', 'text-ok-ink')}>
               {money(entry.price, currency)}
             </span>
             {entry.oldPrice != null && <s className="text-caption tabular-nums text-ink-faint">{money(entry.oldPrice, currency)}</s>}

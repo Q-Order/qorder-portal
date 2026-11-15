@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { CartDto } from '../../api/generated';
 import { money } from '../../shared/format';
+import { lineMode } from './cartPart';
 import { useSupplierCurrency } from '../../supplier/SupplierCurrency';
 
 /**
@@ -67,8 +68,10 @@ export function CartSavings({ cart, withTier = true, tierOnly = false }: {
         <div className="flex justify-between gap-2 text-body font-semibold text-sale-ink" data-testid="cart-discount">
           <span>
             {t(`cart.discount.${discount.kind}`, { percent: discount.percent })}
-            {/* Оптовая цена уже скидка: скидка на заявку считается только от штучных строк. */}
-            {cart.lines.some((line) => line.split) ? ` · ${t('cart.discount.retailOnly')}` : ''}
+            {/* В розничной заявке скидка — только от штучных частей строк; у оптовой своя скидка, от всей
+                суммы (решение владельца 2026-11-13), и оговорка была бы неправдой. */}
+            {cart.lines.some((line) => line.split) && !cart.lines.every((line) => lineMode(line) === 'WHOLESALE')
+              ? ` · ${t('cart.discount.retailOnly')}` : ''}
           </span>
           <span className="tabular-nums">−{money(discount.amount, currency)}</span>
         </div>

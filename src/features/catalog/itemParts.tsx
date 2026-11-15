@@ -6,11 +6,12 @@ import type { TFunction } from 'i18next';
 import { useNavigate } from 'react-router-dom';
 import type { ShowcaseItemDto } from '../../api/generated';
 import { QuantityField } from '../cart/QuantityField';
+import { LineQuantity } from '../cart/LineQuantity';
 import { useAddToCart } from '../cart/ageGate';
 import { packsOnly } from '../cart/wholesale';
 import { firstQuantity, stepOf } from '../cart/saleTerms';
 import { quantityWithUnit, unitPer } from '../../shared/units';
-import { soldByOf } from './soldBy';
+import { soldByPill } from './soldBy';
 import { decimal, money } from '../../shared/format';
 import { useSupplierCurrency } from '../../supplier/SupplierCurrency';
 import { Button } from '../../ui/Button';
@@ -80,12 +81,18 @@ export function CartAction({
   className?: string;
 }) {
   const { t } = useTranslation();
-  const { add: addToCart, isPending } = useAddToCart();
   // У товара «оптом и в розницу» — строка той заявки, в которой клиент сейчас.
   const [orderMode] = useOrderMode();
   const mode = item.wholesale?.retail ? orderMode : undefined;
   const step = stepOf(item.terms);
-  const first = firstQuantity(item.terms);
+  // Одежда оптом — линейками: счётчик линеек и цена линейки мелко (решение владельца 2026-11-14).
+  const line = lineOf(item, mode);
+
+  if (taken && line) {
+    return (
+      <LineQuantity itemId={item.id} minLines={line.from} className={look ? 'h-11' : undefined} />
+    );
+  }
 
   if (taken) {
     return (
@@ -124,6 +131,26 @@ export function CartAction({
    * не обязано получать ссылку на снимок отдельным свойством через два
    * компонента, а строка и плитка остаются каждая собой.
    */
+  return <CartActionButton item={item} look={look} className={className} roomy={roomy} />;
+}
+
+/** Линейка одежды в «Оптом»: первая ступень в линейках и штук в одной; пусто — товар не линейками. */
+function lineOf(item: ShowcaseItemDto, mode: SaleMode | undefined): { from: number } | null {
+  const wholesale = item.wholesale;
+  const first = wholesale?.tiers[0];
+  // «Ваша цена» опт не снимает: при скидке условия сервер отдаёт опт уже со скидкой, при своей цене — без опта (2026-11-15).
+  if (!wholesale?.linePieces || !first) return null;
+  if (mode !== 'WHOLESALE' && wholesale.retail) return null;
+  return { from: first.from };
+}
+
+function CartActionButton({ item, look, className, roomy }: {
+  item: ShowcaseItemDto; look?: CartLook; className?: string; roomy: boolean;
+}) {
+  const { t } = useTranslation();
+  const { add: addToCart, isPending } = useAddToCart();
+  const first = firstQuantity(item.terms);
+
   async function add(event: React.MouseEvent<HTMLButtonElement>) {
     const holder = event.currentTarget.closest('[data-testid="item-tile"], [data-testid="item-row"]');
     const shot = holder?.querySelector('[data-testid="item-thumb"]') ?? event.currentTarget;
@@ -269,7 +296,23 @@ export function isWholesaleDeal(item: Pick<ShowcaseItemDto, 'price'> & Partial<P
  */
 export function inMode<T extends ShowcaseItemDto>(item: T, mode: SaleMode | undefined): T {
   const wholesale = item.wholesale;
-  if (!mode || !wholesale?.retail || item.yourPrice) return item;
+  // Одежда оптом — линейками, а цена на виду — за штуку (решение владельца 2026-11-14); цена линейки — строкой ниже.
+  const firstTier = wholesale?.tiers[0];
+  if (wholesale?.linePieces && wholesale.piecePrice !== undefined && firstTier
+    && (mode === 'WHOLESALE' || !wholesale.retail)) {
+    const oldPiece = firstTier.oldPrice ? Math.round((firstTier.oldPrice / wholesale.linePieces) * 100) / 100 : undefined;
+    return {
+      ...item,
+      unit: wholesale.pieceUnit ?? item.unit,
+      price: wholesale.piecePrice,
+      oldPrice: oldPiece,
+      // При «вашей цене» зачёркнутая — скидка клиента, не распродажа: плашки «Акция» нет (2026-11-15).
+      discountPercent: firstTier.oldPrice && !item.yourPrice ? Math.round((1 - firstTier.price / firstTier.oldPrice) * 100) : undefined,
+      terms: { ...item.terms, minQuantity: firstTier.from, quantityStep: 1 },
+      wholesale: { ...wholesale, retail: false },
+    };
+  }
+  if (!mode || !wholesale?.retail) return item;
   if (mode === 'RETAIL') return { ...item, wholesale: undefined };
   const first = wholesale.tiers[0];
   if (!first) return item;
@@ -278,10 +321,47 @@ export function inMode<T extends ShowcaseItemDto>(item: T, mode: SaleMode | unde
     unit: wholesale.unit,
     price: first.price,
     oldPrice: first.oldPrice,
-    discountPercent: first.oldPrice ? Math.round((1 - first.price / first.oldPrice) * 100) : undefined,
+    discountPercent: first.oldPrice && !item.yourPrice ? Math.round((1 - first.price / first.oldPrice) * 100) : undefined,
     terms: { ...item.terms, minQuantity: first.from, quantityStep: 1 },
     wholesale: { ...wholesale, retail: false },
   };
+}
+
+/** Пресс («… — линейка XS–XXL»): штук внутри и цена за весь пресс — для строки под ценой за штуку. */
+export interface PressPrice {
+  unit: string;
+  pieces: number;
+  price: number;
+}
+
+/**
+ * Цена за штуку у товара-пресса (решение владельца 2026-11-14): крупно — цена пресса, делённая
+ * на штуки в нём, «за шт.»; цена пресса — строкой ниже. Только показ: корзина и счётчик — в прессах.
+ */
+export function perPiece<T extends Pick<ShowcaseItemDto, 'price' | 'oldPrice' | 'unit' | 'yourPrice'>
+  & { packSize?: number; pack?: { quantity: number }[] }>(item: T): T & { press?: PressPrice } {
+  const pieces = item.packSize ?? item.pack?.reduce((sum, member) => sum + member.quantity, 0) ?? 0;
+  if (pieces <= 1) return item;
+  const each = (value: number | undefined) => (value === undefined ? undefined : Math.round((value / pieces) * 100) / 100);
+  return {
+    ...item,
+    price: each(item.price)!,
+    oldPrice: each(item.oldPrice),
+    unit: 'шт',
+    press: { unit: item.unit, pieces, price: item.price },
+  };
+}
+
+/** «линейка 6 шт — 80 000» — мелко под ценой за штуку пресса. */
+export function PressNote({ press, className }: { press?: PressPrice; className?: string }) {
+  const { t } = useTranslation();
+  const currency = useSupplierCurrency();
+  if (!press) return null;
+  return (
+    <span data-testid="press-note" className={cn('text-xs font-semibold text-wholesale', className)}>
+      {t('pack.pressNote', { unit: press.unit, pieces: press.pieces, price: money(press.price, currency) })}
+    </span>
+  );
 }
 
 /**
@@ -303,12 +383,9 @@ export function SaleChannelBadge({ item, className }: { item: Partial<Pick<Showc
   );
 }
 
-/**
- * Цвет крупной цены: у товара «только опт» это цена упаковки, а не штуки, и она выделена
- * цветом опта (`--color-wholesale`), чтобы её не приняли за розничную (решение владельца 2026-10-28).
- */
-export function packPriceClass(item: Partial<Pick<ShowcaseItemDto, 'wholesale'>>): string {
-  return saleChannel(item) === 'wholesale' ? 'text-wholesale' : 'text-ink';
+/** Цвет крупной цены: все цены зелёные, не только со скидкой (просьба владельца 2026-11-15). */
+export function packPriceClass(_item: Partial<Pick<ShowcaseItemDto, 'wholesale'>>): string {
+  return 'text-ok-ink';
 }
 
 /**
@@ -316,6 +393,8 @@ export function packPriceClass(item: Partial<Pick<ShowcaseItemDto, 'wholesale'>>
  * рядом стоит строка опта, и без слова неясно, какая из двух цен — розница.
  */
 export function perUnitNote(item: Pick<ShowcaseItemDto, 'unit'> & Partial<Pick<ShowcaseItemDto, 'wholesale'>>, t: TFunction): string {
+  // «Только опт» — без «за упаковку (10 шт.)» в каталоге (просьба владельца 2026-11-15): это есть в карточке.
+  if (item.wholesale && !item.wholesale.retail && !item.wholesale.linePieces) return '';
   return t(saleChannel(item) === 'both' ? 'catalog.priceNote.perUnitRetail' : 'catalog.priceNote.perUnit', { unit: unitPer(item.unit) });
 }
 
@@ -365,7 +444,7 @@ export function ItemBadges({
       <div className={cn('flex flex-wrap gap-1.5', className)}>
         {/* 21+ — не выгода, а условие покупки: оно остаётся отдельной меткой. */}
         {terms?.ageRestricted && (
-          <span className={cn(pill, 'bg-adult text-white')}>{t('catalog.badge.adult')}</span>
+          <span className={cn(pill, 'bg-adult text-white')}>{t('catalog.badge.adult', { age: terms?.minAge ?? 21 })}</span>
         )}
         {label && kind && (
           <span data-testid="promo-badge" className="contents">
@@ -384,7 +463,7 @@ export function ItemBadges({
       {(terms?.ageRestricted || discount) && (
         // Под точками снимков, когда они есть: угол слева сверху — их.
         <div className={cn('absolute left-2 flex gap-1', belowDots ? 'top-8' : 'top-2')}>
-          {terms?.ageRestricted && <span className={cn(tiny, 'bg-adult text-white')}>{t('catalog.badge.adult')}</span>}
+          {terms?.ageRestricted && <span className={cn(tiny, 'bg-adult text-white')}>{t('catalog.badge.adult', { age: terms?.minAge ?? 21 })}</span>}
           {discount ? <span data-testid="discount-sticker" className={cn(tiny, 'bg-sale text-on-sale')}>−{discount}%</span> : null}
         </div>
       )}
@@ -437,9 +516,11 @@ export function dealOf(item: Pick<ShowcaseItemDto, 'price'> & Partial<Pick<Showc
   return { old: item.price, now: Math.round(best * 100) / 100, wholesale: true };
 }
 
-export function DealPrice({ item, className, size = 'text-xl', oldSize = 'text-sm' }: {
+export function DealPrice({ item, className, size = 'text-xl', oldSize = 'text-sm', note }: {
   item: Pick<ShowcaseItemDto, 'price' | 'unit'> & Partial<Pick<ShowcaseItemDto, 'oldPrice' | 'wholesale'>>;
   className?: string;
+  /** Подпись справа от новой цены («за кг»); у скидки опта своя подпись, эта не ставится. */
+  note?: React.ReactNode;
   /** Кегль новой цены. */
   size?: string;
   /** Кегль старой, зачёркнутой. */
@@ -476,8 +557,11 @@ export function DealPrice({ item, className, size = 'text-xl', oldSize = 'text-s
       <s className={cn('whitespace-nowrap font-semibold tabular-nums text-ink-muted decoration-sale decoration-2', oldSize)}>
         {money(deal.old, currency)}
       </s>
-      <span className={cn('whitespace-nowrap font-extrabold tracking-[-0.02em] tabular-nums text-ok-ink', size)}>
-        {money(deal.now, currency)}
+      <span className="flex flex-wrap items-baseline gap-x-1.5">
+        <span className={cn('whitespace-nowrap font-extrabold tracking-[-0.02em] tabular-nums text-ok-ink', size)}>
+          {money(deal.now, currency)}
+        </span>
+        {note}
       </span>
       {deal.wholesale && (
         <span className="text-xs font-semibold text-ok-ink">
@@ -498,27 +582,30 @@ export function ItemFacts({
   pills = false,
   inline = false,
 }: {
-  item: Pick<ShowcaseItemDto, 'unit' | 'terms'>;
+  item: Pick<ShowcaseItemDto, 'unit' | 'terms'> & Partial<Pick<ShowcaseItemDto, 'wholesale'>>;
   /** Пилюлями в строку — рядом с наличием в карточке товара. */
   pills?: boolean;
   /** Одной строкой через «·» — в плитке витрины: факты не растят карточку выше соседей. */
   inline?: boolean;
 }) {
   const { t } = useTranslation();
-  const terms = item.terms;
+  // Одежда оптом — линейками: «поштучно» и «от N шт.» тут неверны, условия называет блок линейки (2026-11-14).
+  const byLine = !!item.wholesale?.linePieces && !item.wholesale.retail;
+  const terms = byLine ? undefined : item.terms;
   const facts: { key: string; text: string; warn?: boolean }[] = [];
   // «Продаётся поштучно» — только в карточке товара: в строке витрины это
   // повторялось бы у каждой позиции и заслоняло бы редкое и важное —
   // минимум, кратность и 21+.
-  const soldBy = pills ? soldByOf(item.unit, terms, t).pill : undefined;
+  const soldBy = pills && !byLine ? soldByPill(item.unit, terms, t) : undefined;
   if (soldBy) facts.push({ key: 'soldBy', text: soldBy });
-  if (terms?.minQuantity && terms.minQuantity > 1) {
+  // В каталоге (inline) минимума и кратности нет — они в карточке (просьба владельца 2026-11-15); 21+ остаётся.
+  if (!inline && terms?.minQuantity && terms.minQuantity > 1) {
     facts.push({ key: 'min', text: t('catalog.facts.min', { amount: quantityWithUnit(terms.minQuantity, item.unit) }) });
   }
-  if (terms?.quantityStep && terms.quantityStep > 1) {
+  if (!inline && terms?.quantityStep && terms.quantityStep > 1) {
     facts.push({ key: 'step', text: t('catalog.facts.step', { amount: quantityWithUnit(terms.quantityStep, item.unit) }) });
   }
-  if (terms?.ageRestricted) facts.push({ key: 'adult', text: t('catalog.facts.adult'), warn: true });
+  if (terms?.ageRestricted) facts.push({ key: 'adult', text: t('catalog.facts.adult', { count: terms.minAge ?? 21 }), warn: true });
   if (facts.length === 0) return null;
   if (pills) {
     return (

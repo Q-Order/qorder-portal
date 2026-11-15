@@ -4,7 +4,7 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { useState } from 'react';
 import { AlertCircle, ArrowRight, ChevronDown, Info, Maximize2, Minimize2, ShoppingCart, X } from '../../ui/icons';
 import { useClearCart } from './useCart';
-import { useCartPart } from './cartPart';
+import { positionCount, useCartPart } from './cartPart';
 import { PartSwitch } from './PartSwitch';
 import { CartLines } from './CartLines';
 import { closeCart, openCart, useCartDrawer } from './cartDrawer';
@@ -75,7 +75,7 @@ export function CartPanel({ active = true }: { active?: boolean }) {
               </Dialog.Title>
               <span className="truncate text-caption text-ink-muted sm:text-sm">
                 {/* «3 товара · ИП «Мухамедиева»», как в макете: число строк, а не штук. */}
-                {[t('cart.goods', { count: lines.length }), shop?.name].filter(Boolean).join(' · ')}
+                {[t('cart.goods', { count: positionCount(lines) }), shop?.name].filter(Boolean).join(' · ')}
               </span>
             </div>
             <div className="flex items-center gap-2">

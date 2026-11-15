@@ -356,6 +356,25 @@ describe('оформление заявки', () => {
     expect(screen.getByTestId('checkout-layout').className).toContain('grid-cols-[');
   });
 
+  it('линейка в итоге: сколько линеек заказано и «Свободно» линейками, а не штуками размера', async () => {
+    const line = { key: 'leg|grey', lines: 3, pieces: 2, linePrice: 32280, piecePrice: 16140, availableLines: 6,
+      sizes: [{ itemId: 's', label: 'S', quantity: 3 }, { itemId: 'm', label: 'M', quantity: 3 }] };
+    const size = (itemId: string, label: string) => ({
+      itemId, name: 'Легинсы Comfort', variantLabel: `Серый · ${label}`, quantity: 3, unit: 'шт', price: 16140,
+      priceAtAdding: 16140, priceChanged: false, total: 48420, mode: 'WHOLESALE', available: 6, stock: 'IN_STOCK', line,
+    });
+    stubFetch([
+      get('/api/portal/cart', cartWith({ lines: [size('s', 'S'), size('m', 'M')], total: 96840 })),
+      get('/api/portal/delivery', pickupOnly),
+    ]);
+
+    renderScreen(<CheckoutPage />);
+
+    const stock = await screen.findByTestId('checkout-stock');
+    expect(stock).toHaveTextContent('Легинсы Comfort · линейка S–M · Серый · 3 линейки');
+    expect(stock).toHaveTextContent('Свободно: 6 линеек');
+  });
+
   it('пустая корзина не отправляется', async () => {
     stubFetch([
       get('/api/portal/cart', { lines: [], total: 0, skipped: [] }),

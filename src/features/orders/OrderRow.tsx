@@ -6,6 +6,7 @@ import { PhoneLine } from '../shell/PhoneLine';
 import { LineAnswers } from './LineAnswers';
 import { DeclineDialog } from './DeclineDialog';
 import { PackContents, packMembers } from '../catalog/PackContents';
+import { OrderLineGroup, orderRows } from './OrderLineGroup';
 import { Link } from 'react-router-dom';
 import { Check, ChevronDown, ChevronRight, MessageCircleQuestion, RotateCcw, Star } from '../../ui/icons';
 import { useTranslation } from 'react-i18next';
@@ -15,7 +16,9 @@ import {
   useDeclineMyPortalOrder,
   useFillPortalCartFromOrder,
   type PortalOrderDto,
+  type SnapshotLineDto,
 } from '../../api/generated';
+import type { Currency } from '../../shared/currency';
 import { intlLocale } from '../../i18n';
 import { decimal, money } from '../../shared/format';
 import { quantityWithUnit } from '../../shared/units';
@@ -76,9 +79,10 @@ export function OrderPick({ order, unread, selected, onPick }: {
       aria-pressed={selected}
       onClick={onPick}
       className={cn(
-        'flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-card)] border-solid bg-surface px-3.5 py-3 text-left',
+        'flex w-full cursor-pointer items-center gap-3 rounded-[var(--radius-card)] border-2 border-solid bg-surface px-3.5 py-3 text-left',
         'transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-        selected ? 'border-[3px] border-shop bg-ok-soft/40' : 'border-2 border-hairline hover:border-line',
+        // Рамка одной толщины: у выбранной третий пиксель — тенью внутрь, иначе строка сужается и дата обрезается.
+        selected ? 'border-shop bg-ok-soft/40 shadow-[inset_0_0_0_1px_var(--color-shop)]' : 'border-hairline hover:border-line',
       )}
     >
       <PickLines order={order} unread={unread} />
@@ -110,7 +114,7 @@ export function OrderLink({ order, unread }: { order: PortalOrderDto; unread?: U
         {!answer && order.pickupCode ? <PickupCode code={order.pickupCode} /> : null}
         <p className="m-0 flex items-center gap-2 text-caption text-ink-muted">
           {unread ? <span role="img" aria-label={t('orders.v2.new')} className="size-2.5 shrink-0 rounded-full bg-sale" /> : null}
-          {t('orders.v2.title', { number: order.orderNumber })} · {orderDay(order.createdAt)} · {t('orders.v2.goods', { count: linesOf(order).length })}
+          {t('orders.v2.title', { number: order.orderNumber })} · {orderDay(order.createdAt)} · {t('orders.v2.goods', { count: orderRows(linesOf(order)).length })}
         </p>
         <Link to={`/orders/${order.id}`} className={answer ? BIG_PRIMARY : BIG_SECONDARY}>
           {t(answer ? 'orders.v2.viewAnswer' : 'orders.v2.open')}
@@ -130,8 +134,14 @@ export function OrderLink({ order, unread }: { order: PortalOrderDto; unread?: U
   );
 }
 
+/** Цена до распродажи, зачёркнутая — как клиент видел её в корзине; не было скидки — ничего. */
+export function OldPrice({ line, currency }: { line: SnapshotLineDto; currency?: Currency }) {
+  if (line.listPrice === undefined || line.price === undefined || line.listPrice <= line.price) return null;
+  return <><s data-testid="order-line-old-price" className="text-ink-faint">{money(line.listPrice, currency)}</s>{' '}</>;
+}
+
 /** Пилюля вида заявки — цвета макета: ответ — тёплым, забрать — зелёным, проверка — жёлтым. */
-function Pill({ kind, big = false }: { kind: OrderKind; big?: boolean }) {
+export function Pill({ kind, big = false }: { kind: OrderKind; big?: boolean }) {
   const { t } = useTranslation();
   return (
     <span className={cn('inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full font-extrabold',
@@ -151,7 +161,11 @@ function PickLines({ order, unread }: { order: PortalOrderDto; unread?: Unread }
       <LineThumb seed={first?.itemId ?? first?.name ?? order.id} src={first?.imageUrl} className="size-14 rounded-[0.875rem]" />
       <span className="flex min-w-0 flex-1 flex-col items-start">
         <span className="flex max-w-full items-center gap-2 text-body font-extrabold text-ink">
-          <span className="truncate">{t('orders.v2.title', { number: order.orderNumber })} · {orderDay(order.createdAt)}</span>
+          {/* Номер — целиком, по нему заявку ищут; тесно — сокращается дата («Заявка №2026-00002 · 14 но…»). */}
+          <span className="flex min-w-0">
+            <span className="shrink-0">{t('orders.v2.title', { number: order.orderNumber })}</span>
+            <span className="truncate">&nbsp;· {orderDay(order.createdAt)}</span>
+          </span>
           {unread ? <span role="img" aria-label={t('orders.v2.new')} className="size-2.5 shrink-0 rounded-full bg-sale" /> : null}
         </span>
         <Pill kind={kind} />
@@ -262,7 +276,10 @@ function OrderDetails({ order, kind, variant }: { order: PortalOrderDto; kind: O
         <section className="flex flex-col gap-2" aria-label={t('orders.v2.ordered')}>
           <Label>{t('orders.v2.ordered')}</Label>
           <ul className="m-0 flex list-none flex-col p-0">
-            {lines.map((line, index) => (
+            {orderRows(lines).map((row) => {
+              if (row.kind === 'line') return <OrderLineGroup key={row.key} rows={row.rows} currency={order.currency} />;
+              const { line, index } = row;
+              return (
               <li key={`${line.name}-${index}`} className="flex items-center gap-3 border-0 border-b border-solid border-hairline py-2 text-sm">
                 {/* Снимок — чтобы узнать товар с одного взгляда; нажатием открывает его карточку. */}
                 <LinkedLineThumb
@@ -278,16 +295,17 @@ function OrderDetails({ order, kind, variant }: { order: PortalOrderDto; kind: O
                     {line.pack ? <PackContents label={t('pack.inPress')} members={packMembers(line.pack)} /> : null}
                   </span>
                   <span className="shrink-0 text-caption tabular-nums text-ink-subtle">
-                    {line.unit ? quantityWithUnit(line.quantity, line.unit) : decimal(line.quantity)}{line.price !== undefined ? ` × ${money(line.price, order.currency)}` : ''}{packNote(line, t)}
+                    {line.unit ? quantityWithUnit(line.quantity, line.unit) : decimal(line.quantity)}{line.price !== undefined ? <> × <OldPrice line={line} currency={order.currency} />{money(line.price, order.currency)}</> : null}{packNote(line, t)}
                   </span>
                   <span className="ml-auto shrink-0 text-right font-bold tabular-nums text-ink sm:ml-0 sm:w-28">
                     {line.amount !== undefined ? money(line.amount, order.currency) : '—'}
                   </span>
                 </span>
               </li>
-            ))}
+              );
+            })}
           </ul>
-          {order.delivery ? <OrderDelivery delivery={order.delivery} /> : null}
+          {order.delivery ? <OrderDelivery delivery={order.delivery} pickup={!!order.pickup} /> : null}
           {/* Разбивка — у отправленного состава; предложенный продавцом идёт одним итогом. */}
           <OrderTotals
             total={totalOf(order)}
@@ -355,7 +373,8 @@ function RateItems({ order }: { order: PortalOrderDto }) {
   const [open, setOpen] = useState(false);
   const listId = useId();
   const reviews = useCurrentShop()?.reviews;
-  const lines = linesOf(order);
+  // Линейка одежды — один товар: оценивают модель, а не каждый её размер.
+  const lines = orderRows(linesOf(order)).map((row) => (row.kind === 'line' ? row.rows[0] : row.line));
   // Отзывы выключены у магазина (R-17) — оценивать товар негде.
   if (!reviews || !lines.some((line) => line.itemId)) return null;
 

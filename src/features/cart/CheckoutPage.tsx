@@ -22,14 +22,16 @@ import { phone as formatPhone } from '../../shared/format';
 import { CartSavings } from './CartSavings';
 import { AdultNotice } from './AdultNotice';
 import { useCheckout, type Checkout } from './useCheckout';
-import { useCartPart } from './cartPart';
+import { cartRows, useCartPart } from './cartPart';
+import { lineGroupTitle } from './CartLineGroup';
 import { PartSwitch } from './PartSwitch';
-import { CheckoutBreakdown, CheckoutTotal } from './CheckoutBreakdown';
+import { CheckoutBreakdown, CheckoutTotal, useReceiveWay } from './CheckoutBreakdown';
 import { VolumeHint } from '../catalog/views/VolumeHint';
 import { CreditNotice } from './CreditNotice';
 import { PaymentChoice } from './PaymentChoice';
-import { useGetPortalPromotions, type DeliveryOptionsDto } from '../../api/generated';
+import { type DeliveryOptionsDto } from '../../api/generated';
 import { PageHelp } from '../shell/HelpGuide';
+import { usePromotions } from '../promotions/usePromotions';
 
 type Step = 1 | 2 | 3;
 
@@ -66,7 +68,7 @@ export function CheckoutPage() {
   useEffect(() => { if (stale) setStep(1); }, [stale]);
 
   if (submitted) {
-    const other = checkout.part ? (checkout.part === 'WHOLESALE' ? 'RETAIL' : 'WHOLESALE') : undefined;
+    const other = checkout.sentPart ? (checkout.sentPart === 'WHOLESALE' ? 'RETAIL' : 'WHOLESALE') : undefined;
     const left = other ? parts.counts[other] : 0;
     return (
       <div className="mx-auto flex max-w-[36rem] flex-col items-center gap-4 rounded-[var(--radius-card)] bg-surface px-6 py-12 text-center shadow-[0_0_0_1px_var(--color-hairline)]">
@@ -82,7 +84,8 @@ export function CheckoutPage() {
           </Button>
         )}
         <div className="flex w-full flex-col gap-2.5 pt-2 sm:flex-row sm:justify-center">
-          <Button variant="accent" size="lg" onClick={() => navigate('/orders')}>
+          {/* Главная кнопка одна: ждёт вторая заявка — «Мои заявки» второстепенная. */}
+          <Button variant={other && left > 0 ? 'outline' : 'accent'} size="lg" onClick={() => navigate('/orders')}>
             {t('checkout.sent.toOrders')}
           </Button>
           <Button variant="outline" size="lg" onClick={() => navigate('/catalog')}>
@@ -131,7 +134,8 @@ export function CheckoutPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    // `data-checkout` — стрелке «наверх» уступить место на телефоне: внизу шага итог и «Дальше» (QA 2026-11-15).
+    <div data-checkout="" className="flex flex-col gap-4">
       <div className="flex items-center gap-3">
         {back}
         <h1 className="qo-page-title flex-1">{title}</h1>
@@ -152,6 +156,8 @@ export function CheckoutPage() {
           <GoodsCard />
           {/* Низ как в макете SimplePicCart: какая заявка и на сколько, затем «Дальше: как получить». */}
           <div className="flex flex-col gap-2.5">
+            {/* Скидка на заявку — уже здесь, над итогом: иначе сумма строк не сходилась с итогом без объяснения. */}
+            <CartSavings cart={checkout.cart} withTier={false} />
             <div className="flex items-baseline justify-between gap-2">
               <span className="text-lead font-bold text-ink">
                 {t(parts.split && parts.part ? `checkout.part.${parts.part}` : 'checkout.summary.yours')}
@@ -176,7 +182,7 @@ export function CheckoutPage() {
 
       {step === 3 && (
         <>
-          <ReceiveCard checkout={checkout} onChange={() => go(2)} />
+          <ReceiveCard checkout={checkout} pickupOnly={options?.mode === 'PICKUP_ONLY'} onChange={() => go(2)} />
           {checkout.askCredit && <PaymentChoice checkout={checkout} />}
           <NoteField checkout={checkout} />
           <Summary checkout={checkout} wide={false} />
@@ -314,9 +320,21 @@ function NoteField({ checkout }: { checkout: Checkout }) {
 }
 
 /** «Как получите» на последнем шаге телефона — с «Изменить», чтобы вернуться к выбору. */
-function ReceiveCard({ checkout, onChange }: { checkout: Checkout; onChange: () => void }) {
-  const { t } = useTranslation();
-  const chosen = !!checkout.delivery.methodId;
+function ReceiveCard({ checkout, pickupOnly, onChange }: { checkout: Checkout; pickupOnly: boolean; onChange: () => void }) {
+  const { t, i18n } = useTranslation();
+  const way = useReceiveWay(checkout);
+  const options = useDeliveryOptions();
+  const { pickupPointId, address, date } = checkout.delivery;
+  // Что именно выбрано, а не «способ выбран» (просьба владельца 2026-11-15):
+  // «Самовывоз · Склад на Абая» или «Доставка · Абая 10 · завтра».
+  const point = options?.pickupPoints.find((candidate) => candidate.id === pickupPointId);
+  const shift = date ? Math.round((new Date(`${date}T00:00:00`).getTime() - new Date().setHours(0, 0, 0, 0)) / 86_400_000) : undefined;
+  const day = !date ? undefined : shift === 0 ? t('checkout.delivery.today') : shift === 1 ? t('checkout.delivery.tomorrow')
+    : new Date(`${date}T00:00:00`).toLocaleDateString(i18n.language, { day: 'numeric', month: 'long' });
+  const chosen = way === 'PICKUP' || pickupOnly
+    ? [t('checkout.delivery.pickup'), point?.name]
+    : way === 'DELIVERY' ? [t('checkout.delivery.courier'), address, day] : [];
+  const text = chosen.filter(Boolean).join(' · ');
   return (
     <Card className="flex items-center gap-3 p-4">
       <span aria-hidden="true" className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-ok-soft text-ok-ink">
@@ -324,7 +342,7 @@ function ReceiveCard({ checkout, onChange }: { checkout: Checkout; onChange: () 
       </span>
       <span className="min-w-0 flex-1">
         <b className="block text-lead font-extrabold text-ink">{t('checkout.steps.receive')}</b>
-        <span className="text-sm text-ink-muted">{t(chosen ? 'checkout.steps.receiveChosen' : 'checkout.steps.receiveLater')}</span>
+        <span className="text-sm text-ink-muted">{text || t('checkout.steps.receiveLater')}</span>
       </span>
       <button type="button" onClick={onChange} className="cursor-pointer border-0 bg-transparent p-0 text-body font-bold text-shop-ink underline-offset-4 hover:underline">
         {t('checkout.steps.change')}
@@ -336,10 +354,29 @@ function ReceiveCard({ checkout, onChange }: { checkout: Checkout; onChange: () 
 /** «Ваша заявка»: итог, телефон для связи, что будет дальше и отправка. На мониторе — колонкой справа. */
 function Summary({ checkout, wide }: { checkout: Checkout; wide: boolean }) {
   const { t } = useTranslation();
+  const way = useReceiveWay(checkout);
   const { phone: viewerPhone } = useAuth();
   const { cart, lines, totals } = checkout;
-  const promotionsQuery = useGetPortalPromotions();
+  const promotionsQuery = usePromotions(true, checkout.part);
   const promotions = promotionsQuery.data?.status === 200 ? promotionsQuery.data.data : undefined;
+  // Линейка одежды — одной строкой (решение владельца 2026-11-14): миниатюра и наличие — по её
+  // размеру, у которого с наличием хуже всего, а не восемь строк «Пальто».
+  const groups = cartRows(lines);
+  const heads = groups.map((row) => (row.kind === 'one' ? row.line : row.rows[0]));
+  const shownStock = groups.flatMap((row) => {
+    if (row.kind === 'one') return showsStock(row.line) ? [{ line: row.line, label: row.line.name, lines: undefined }] : [];
+    const worst = row.rows.find((one) => showsStock(one) && one.stock !== 'IN_STOCK') ?? row.rows.find(showsStock);
+    if (!worst) return [];
+    const { name, colour, range } = lineGroupTitle(row.rows[0]);
+    // Свободно и нужно — линейками, а не штуками худшего размера: «Свободно: 6» читалось как штуки.
+    const { lines: taken, availableLines } = row.rows[0].line!;
+    return [{
+      line: worst,
+      label: [t('cart.lineRow.title', { name, range }), colour, t('cart.lines.unitCount', { count: taken })].filter(Boolean).join(' · '),
+      lines: availableLines == null ? undefined
+        : { available: availableLines, needed: taken, amount: t('cart.lines.unitCount', { count: availableLines }) },
+    }];
+  });
   return (
     <Card
       data-testid="checkout-summary"
@@ -356,18 +393,19 @@ function Summary({ checkout, wide }: { checkout: Checkout; wide: boolean }) {
           </div>
           {lines.length > 0 && (
             <div aria-hidden="true" className="flex gap-2 overflow-hidden">
-              {lines.slice(0, 5).map((line) => (
+              {heads.slice(0, 5).map((line) => (
                 <LineThumb key={`${line.itemId}:${line.mode ?? ''}`} seed={line.itemId} src={line.imageUrl} className="size-14 shrink-0 rounded-[var(--radius-control)]" />
               ))}
             </div>
           )}
           {/* Наличие по строкам — миниатюры его не показывают, а «Продавец проверит, всё ли есть» ниже. */}
-          {lines.some(showsStock) && (
+          {shownStock.length > 0 && (
             <ul data-testid="checkout-stock" className="m-0 flex list-none flex-col gap-1 p-0">
-              {lines.filter(showsStock).map((line) => (
+              {shownStock.map(({ line, label, lines: inLines }) => (
                 <li key={`${line.itemId}:${line.mode ?? ''}`} className="flex items-baseline justify-between gap-3 text-sm">
-                  <span className="min-w-0 truncate text-ink">{line.name}</span>
-                  <StockNote stock={line.stock} available={line.available} needed={line.quantity} short className="mt-0 shrink-0 text-caption" />
+                  <span className="min-w-0 truncate text-ink">{label}</span>
+                  <StockNote stock={line.stock} available={inLines?.available ?? line.available} needed={inLines?.needed ?? line.quantity}
+                    amount={inLines?.amount} short className="mt-0 shrink-0 text-caption" />
                 </li>
               ))}
             </ul>
@@ -389,7 +427,8 @@ function Summary({ checkout, wide }: { checkout: Checkout; wide: boolean }) {
         <ol className="m-0 flex list-decimal flex-col gap-0.5 pl-5">
           <li>{t('checkout.next.check')}</li>
           <li>{t('checkout.next.decide')}</li>
-          <li>{t('checkout.next.deliver')}</li>
+          {/* Выбран способ — третий пункт о нём; не выбран — общий (2026-11-15). */}
+          <li>{t(way === 'PICKUP' ? 'checkout.next.collect' : way === 'DELIVERY' ? 'checkout.next.bring' : 'checkout.next.deliver')}</li>
         </ol>
       </section>
       <Button
@@ -406,11 +445,12 @@ function Summary({ checkout, wide }: { checkout: Checkout; wide: boolean }) {
       {checkout.credit === null && lines.length > 0 && (
         <p role="note" className="m-0 text-center text-sm font-semibold text-ink">{t('checkout.payment.required')}</p>
       )}
-      {totals.shipping === undefined && !totals.direct && (
+      {/* Самовывоз — без «стоимость доставки добавят при проверке»: доставки нет (2026-11-15). */}
+      {totals.shipping === undefined && !totals.direct && way !== 'PICKUP' && (
         <p className="text-sm text-ink-muted">{t('checkout.summary.shippingNote')}</p>
       )}
       <AdultNotice cart={cart} />
-      {wide && <VolumeHint data={promotions} compact />}
+      {wide && <VolumeHint data={promotions} cart={cart} compact />}
       {/* Крупнее мелкой сноски (просьба владельца 2026-11-06): последняя строка экрана, её читают перед отправкой. */}
       <p className="text-center text-base font-semibold text-ink-muted">{t('checkout.payLaterShort')}</p>
     </Card>

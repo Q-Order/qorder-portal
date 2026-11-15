@@ -101,10 +101,14 @@ describe('товар глазами выбранной заявки', () => {
     expect(saleChannel(shown)).toBe('retail');
   });
 
-  it('товар одного способа и своя цена клиента — без изменений', () => {
+  it('товар одного способа — без изменений; «ваша цена» режим не отменяет', () => {
     const packs = { ...cement, wholesale: { ...wholesale, retail: false } };
     expect(inMode(packs, 'RETAIL')).toBe(packs);
+    // Скидка клиента (2026-11-15): опт приходит уже со скидкой — в «Оптом» цена опта, как у всех.
     const yours = { ...cement, yourPrice: true };
-    expect(inMode(yours, 'WHOLESALE')).toBe(yours);
+    expect(inMode(yours, 'WHOLESALE')).toMatchObject({ price: inMode(cement, 'WHOLESALE').price, yourPrice: true });
+    // Зачёркнутая при «вашей цене» — скидка клиента, а не распродажа: без процента акции.
+    const discounted = { ...cement, yourPrice: true, wholesale: { ...wholesale, tiers: [{ from: 1, price: 1710, oldPrice: 1800 }] } };
+    expect(inMode(discounted, 'WHOLESALE').discountPercent).toBeUndefined();
   });
 });

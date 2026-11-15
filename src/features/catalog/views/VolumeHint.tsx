@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Box } from '../../../ui/icons';
 import { Link } from 'react-router-dom';
-import type { PortalPromotionsDto } from '../../../api/generated';
-import { cartOf, useCart } from '../../cart/useCart';
+import type { CartDto, PortalPromotionsDto } from '../../../api/generated';
 import { money } from '../../../shared/format';
 import { useSupplierCurrency } from '../../../supplier/SupplierCurrency';
 import { cn } from '../../../ui/cn';
@@ -17,13 +16,18 @@ import { cn } from '../../../ui/cn';
  * Ближе порога, чем решил магазин (`volumeHintPercent`), подсказка не зовёт
  * добирать — она называет условие: «От 100 000 тенге — −5% на всю заявку».
  */
-export function VolumeHint({ data, compact }: { data: PortalPromotionsDto | undefined; compact: boolean }) {
+export function VolumeHint({ data, cart, compact }: {
+  data: PortalPromotionsDto | undefined;
+  /** Корзина отправляемой заявки — её сумма и её скидка, а не всей корзины обоих видов. */
+  cart: CartDto | undefined;
+  compact: boolean;
+}) {
   const { t } = useTranslation();
   const currency = useSupplierCurrency();
-  const cart = cartOf(useCart().data);
   const tiers = data?.volumeTiers ?? [];
   if (!data) return null;
-  const first = data.firstOrder?.status === 'ELIGIBLE' ? data.firstOrder : null;
+  // Скидка на первую заявку уже в итоге — «применится сама» было бы обещанием того, что уже сделано.
+  const first = data.firstOrder?.status === 'ELIGIBLE' && cart?.discount?.kind !== 'FIRST_ORDER' ? data.firstOrder : null;
   if (tiers.length === 0) {
     // Без порогов за объём полосе нечего мерить — остаётся билет скидки
     // на первую заявку, как справа в полной подсказке.

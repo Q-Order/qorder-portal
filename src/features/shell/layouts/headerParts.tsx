@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search } from '../../../ui/icons';
+import { Search, X } from '../../../ui/icons';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../../ui/cn';
 import { useSupplier } from '../../../supplier/useSupplier';
@@ -65,7 +65,27 @@ export function useHeaderSearch() {
     navigate(trimmed ? `/catalog?q=${encodeURIComponent(trimmed)}` : '/catalog');
   }
 
-  return { query, setQuery, search, searchRef };
+  /**
+   * Поле пустое — поиска нет: стёртый запрос снимается с витрины сразу, без Enter
+   * (замечание владельца 2026-11-15). Прочие отборы адреса — рубрика, фильтры — остаются.
+   */
+  function change(next: string) {
+    setQuery(next);
+    if (next.trim() || pathname !== '/catalog') return;
+    const params = new URLSearchParams(addressSearch);
+    if (!params.has('q')) return;
+    params.delete('q');
+    const rest = params.toString();
+    navigate(rest ? `/catalog?${rest}` : '/catalog');
+  }
+
+  /** Крестик в поле: очистить, снять поиск и сразу печатать новый. */
+  function clear() {
+    change('');
+    searchRef.current?.focus();
+  }
+
+  return { query, setQuery: change, search, searchRef, clear };
 }
 
 /**
@@ -85,7 +105,7 @@ export function SearchField({ grow = true, className, bare = false, autoFocus = 
   bare?: boolean;
 }) {
   const { t } = useTranslation();
-  const { query, setQuery, search, searchRef } = useHeaderSearch();
+  const { query, setQuery, search, searchRef, clear } = useHeaderSearch();
   return (
     <form
       role="search"
@@ -109,8 +129,14 @@ export function SearchField({ grow = true, className, bare = false, autoFocus = 
         placeholder={placeholder ?? (bare ? t('shell.search') : t('shell.searchPlaceholder'))}
         value={query}
         onChange={(event) => setQuery(event.currentTarget.value)}
-        className="h-full min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted"
+        className="h-full min-w-0 flex-1 bg-transparent text-sm text-ink outline-none placeholder:text-ink-muted [&::-webkit-search-cancel-button]:appearance-none"
       />
+      {query ? (
+        <button type="button" onClick={clear} aria-label={t('shell.searchClear')}
+          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-transparent text-ink-muted transition-colors hover:bg-sunk hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+          <X aria-hidden="true" className="size-4" />
+        </button>
+      ) : null}
       {bare || !hint ? null : (
         <kbd
           aria-hidden="true"

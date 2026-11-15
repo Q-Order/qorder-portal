@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import i18n from '../i18n';
-import { quantityWithUnit, unitFor, unitPer } from './units';
+import { fromQuantity, quantityWithUnit, unitFor, unitPer } from './units';
 
 describe('количество с единицей', () => {
   afterEach(async () => {
@@ -72,5 +72,23 @@ describe('единица после «за»', () => {
     expect(unitPer('упаковка')).toBe('упаковка');
     await i18n.changeLanguage('en');
     expect(unitPer('коробка')).toBe('коробка');
+  });
+});
+
+describe('fromQuantity', () => {
+  afterEach(() => i18n.changeLanguage('ru'));
+
+  it('«от N» — родительный падеж знакомой единицы', async () => {
+    await i18n.changeLanguage('ru');
+    expect(fromQuantity(1, 'упаковка')).toBe('от 1 упаковки');
+    expect(fromQuantity(5, 'упаковка')).toBe('от 5 упаковок');
+    expect(fromQuantity(21, 'мешок')).toBe('от 21 мешка');
+    expect(fromQuantity(11, 'линейка')).toBe('от 11 линеек');
+    expect(fromQuantity(3, 'кг')).toBeUndefined();
+  });
+
+  it('не русский язык — пусто', async () => {
+    await i18n.changeLanguage('kk');
+    expect(fromQuantity(1, 'упаковка')).toBeUndefined();
   });
 });

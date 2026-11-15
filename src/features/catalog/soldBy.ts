@@ -1,6 +1,5 @@
 import type { TFunction } from 'i18next';
 import type { ItemSaleTerms } from '../../api/generated';
-import { quantityWithUnit } from '../../shared/units';
 
 /**
  * Штучная ли единица. Продавец пишет единицу свободным текстом, и «шт»,
@@ -15,26 +14,13 @@ export function isPieceUnit(unit: string): boolean {
 }
 
 /**
- * Как продаётся товар: «Продаётся поштучно», «Продаётся по 6 бутылок».
- * Выводится из того, что продавец уже указал
- * (единица и кратность), — отдельного поля для этого нет, и придумывать
- * его экран не вправе.
- *
- * `pill` — строка для пилюли у наличия; `value` — значение строки
- * «Продаётся» в характеристиках. Пилюля — только при кратности 1 и без
- * минимума: иначе рядом уже стоят «Заказ от…» и «Продаём по…», и третья
- * пилюля о том же спорила бы с ними («поштучно», но «от 10 шт.»).
+ * Пилюля «Продаётся поштучно» у наличия в карточке товара. Выводится из того, что продавец уже
+ * указал (единица и кратность), — отдельного поля для этого нет. Только при кратности 1 и без
+ * минимума: иначе рядом уже стоят «Заказ от…» и «Продаём по…», и третья пилюля о том же спорила
+ * бы с ними. В характеристиках строки «Продаётся» нет — она повторяла пилюлю (просьба владельца 2026-11-14).
  */
-export function soldByOf(unit: string, terms: ItemSaleTerms | undefined, t: TFunction) {
+export function soldByPill(unit: string, terms: ItemSaleTerms | undefined, t: TFunction): string | undefined {
   const step = terms?.quantityStep ?? 1;
   const least = terms?.minQuantity ?? 1;
-  const piece = isPieceUnit(unit);
-  // «в единицах «упаковка»» не выводится — единица видна у цены и счётчика (просьба владельца 2026-11-06).
-  const value = step > 1
-    ? t('item.soldBy.stepValue', { amount: quantityWithUnit(step, unit) })
-    : piece ? t('item.soldBy.pieceValue') : undefined;
-  // Пилюля только «поштучно»: «Продаётся в единицах «упаковка»» убрана — единица и так видна
-  // у цены и счётчика (просьба владельца 2026-11-06).
-  const pill = step <= 1 && least <= 1 && piece ? t('item.soldBy.piece') : undefined;
-  return { value, pill };
+  return step <= 1 && least <= 1 && isPieceUnit(unit) ? t('item.soldBy.piece') : undefined;
 }

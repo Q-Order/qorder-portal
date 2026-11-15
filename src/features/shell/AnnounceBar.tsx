@@ -1,13 +1,14 @@
 import { useTranslation } from 'react-i18next';
-import { useGetPortalDeliveryOptions, useGetPortalPromotions } from '../../api/generated';
+import { useGetPortalDeliveryOptions } from '../../api/generated';
 import { useSupplierCurrency } from '../../supplier/SupplierCurrency';
 import { announceMessages } from './announceMessages';
+import { usePromotions } from '../promotions/usePromotions';
 
 /** Строки полосы из условий открытого магазина; `enabled` — тема с полосой. */
 export function useAnnounceMessages(enabled: boolean): string[] {
   const { t } = useTranslation();
   const currency = useSupplierCurrency();
-  const promotions = useGetPortalPromotions({ query: { enabled } });
+  const promotions = usePromotions(enabled);
   const delivery = useGetPortalDeliveryOptions({ query: { enabled } });
   if (!enabled) return [];
   return announceMessages({

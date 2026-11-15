@@ -1,3 +1,4 @@
+import { positionCount } from '../cart/cartPart';
 import { useIsFetching, useQueryClient } from '@tanstack/react-query';
 import { PhoneLine } from './PhoneLine';
 import { messageCounts } from './messageCounts';
@@ -537,8 +538,11 @@ function SystemMark() {
  * же лист, что и «Меню» в шапке: одно место для всех остальных разделов.
  */
 /** Свой знак каталога: четыре плитки витрины, одна — фирменная оранжевая (макеты «Кабинет клиента 2.0»). */
-/** Разделы, плитки которых стоят на «Главной»: внизу горит она. */
-const HOME_PATHS = ['/home', '/orders', '/promotions', '/favorites', '/new-arrivals'];
+/**
+ * «Главная» горит только на себе: в «Моих заявках», «Акциях», «Избранном», «Новинках» — ни один пункт
+ * (решение владельца 2026-11-15, вместо прежнего «разделы с плиткой на Главной зажигают её»).
+ */
+const HOME_PATHS = ['/home'];
 
 function BottomNav({
   current,
@@ -548,7 +552,7 @@ function BottomNav({
   cartActive: boolean;
 }) {
   const { t } = useTranslation();
-  const lines = cartOf(useCart(cartActive).data)?.lines.length ?? 0;
+  const lines = positionCount(cartOf(useCart(cartActive).data)?.lines);
   // Непрочитанное текущего магазина — тот же запрос, что у колокольчика: числа совпадают.
   const notifications = useGetPortalNotifications({ query: { enabled: cartActive } });
   // «Сообщения» — разговор с продавцом: заявки, вопросы, отзывы. Колокольчик считает всё.
@@ -564,7 +568,7 @@ function BottomNav({
     active ? 'font-extrabold text-home-icon' : 'text-ink-muted',
   );
   const home = HOME_PATHS.some((path) => current === path || current.startsWith(`${path}/`));
-  // «Сообщения» горят и в своих разделах: вопросы, отзывы. «Мои заявки» — с «Главной» (решение владельца 2026-11-05).
+  // «Сообщения» горят и в своих разделах: вопросы, отзывы.
   const messages = ['/messages', '/questions', '/reviews']
     .some((path) => current === path || current.startsWith(`${path}/`));
   // «Ещё» внизу больше нет (решение владельца 2026-10-30): все разделы — плитками на «Главной», «Выйти» — значком на «Главной» и в заголовке «Всех разделов».

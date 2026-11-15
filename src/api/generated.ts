@@ -3353,6 +3353,61 @@ export interface VolumeTierDto {
 }
 
 /**
+ * Акции и скидки оптовой продажи
+ */
+export interface PromoChannelDto {
+  /** Распродажа включена */
+  saleEnabled: boolean;
+  /**
+     * Название распродажи
+     * @minLength 0
+     * @maxLength 60
+     */
+  saleTitle?: string;
+  /**
+     * Пара слов о распродаже
+     * @minLength 0
+     * @maxLength 200
+     */
+  saleText?: string;
+  /** Первый день распродажи; пусто — сразу */
+  saleStartsOn?: string;
+  /** Последний день распродажи */
+  saleEndsOn?: string;
+  /** Показывать отсчёт до конца распродажи */
+  saleCountdown: boolean;
+  /** Скидка за объём включена */
+  volumeEnabled: boolean;
+  /**
+     * Пороги скидки за объём, не больше трёх
+     * @minItems 0
+     * @maxItems 3
+     */
+  volumeTiers: VolumeTierDto[];
+  /** Подсказывать «Ещё N (знак валюты) до скидки» */
+  volumeHintEnabled: boolean;
+  /**
+     * Подсказка появляется, когда до порога осталось не больше этой доли, %
+     * @minimum 1
+     * @maximum 100
+     */
+  volumeHintPercent: number;
+  /** Скидка на первую заявку включена */
+  firstOrderEnabled: boolean;
+  /**
+     * Скидка на первую заявку, %
+     * @minimum 1
+     * @maximum 90
+     */
+  firstOrderPercent?: number;
+  /**
+     * Скидка на первую заявку — от этой суммы товаров; пусто — на любую
+     * @minimum 0
+     */
+  firstOrderMinTotal?: number;
+}
+
+/**
  * Сохранение настроек акций и скидок
  */
 export interface SavePromoSettingsRequest {
@@ -3407,6 +3462,8 @@ export interface SavePromoSettingsRequest {
      * @minimum 0
      */
   firstOrderMinTotal?: number;
+  /** Акции и скидки оптовой продажи; поля выше — розничной. Не передано — оптовые остаются как были */
+  wholesale?: PromoChannelDto;
 }
 
 /**
@@ -3441,6 +3498,8 @@ export interface PromoSettingsDto {
   volumeHintPercent: number;
   /** Скидка на первую заявку — от этой суммы товаров; пусто — на любую */
   firstOrderMinTotal?: number;
+  /** Акции и скидки оптовой продажи; поля выше — розничной */
+  wholesale: PromoChannelDto;
 }
 
 /**
@@ -3472,16 +3531,25 @@ export interface PromoMarkDto {
 }
 
 /**
- * Скидка на товар распродажи
+ * Товар в распродаже
  */
 export interface PromoItemRequest {
   /**
-     * Скидка, %
+     * Скидка розничной распродажи, %; не передано — как было
      * @minimum 1
      * @maximum 90
      */
-  percent: number;
-  /** Действует ли распродажа и на оптовую цену; не передано — нет */
+  percent?: number;
+  /**
+     * Скидка оптовой распродажи, %; не передано — как было
+     * @minimum 1
+     * @maximum 90
+     */
+  wholesalePercent?: number;
+  /**
+     * Прежний признак «и на опт»: да — оптовая скидка равна розничной, нет — товар уходит из оптовой распродажи. Не передано — как было. Новым экранам — `wholesalePercent`
+     * @deprecated
+     */
   includeWholesale?: boolean;
 }
 
@@ -3499,15 +3567,20 @@ export interface PromoItemDto {
   unit?: string;
   /** Цена позиции без скидки; пусто — цены нет */
   price?: number;
-  /** Скидка, % */
-  percent: number;
-  /** Цена со скидкой */
+  /** Скидка розничной распродажи, %; пусто — товар не в ней */
+  percent?: number;
+  /** Розничная цена со скидкой; пусто — нет розничной скидки или цены */
   salePrice?: number;
   /** Адрес главного снимка позиции — того, что стоит в витрине первым; пусто — снимков нет */
   thumbnailUrl?: string;
   /** Видит ли покупатель товар на витрине: позиция показывается и у неё есть цена. Скрытый или товар без цены стоит в распродаже, но скидку по нему никто не увидит */
   onShowcase: boolean;
-  /** Распродажа действует и на оптовую цену */
+  /** Скидка оптовой распродажи, %; пусто — товар не в ней */
+  wholesalePercent?: number;
+  /**
+     * Товар в оптовой распродаже — прежнее имя признака, для старых экранов
+     * @deprecated
+     */
   includeWholesale: boolean;
 }
 
@@ -3519,6 +3592,26 @@ export interface ItemDiscountExclusionsRequest {
   volumeExcluded: boolean;
   /** Исключить из скидки на первую заявку */
   firstOrderExcluded: boolean;
+}
+
+/**
+ * Оптовая распродажа и скидки опта магазина
+ */
+export interface ItemPromoWholesaleSale {
+  /** Оптовая распродажа включена */
+  enabled: boolean;
+  /** Название */
+  title?: string;
+  /** Первый день; пусто — сразу */
+  startsOn?: string;
+  /** Последний день */
+  endsOn?: string;
+  /** Включена и сегодня в сроках */
+  active: boolean;
+  /** Скидка за объём опта включена */
+  volumeEnabled: boolean;
+  /** Скидка на первую оптовую заявку включена */
+  firstOrderEnabled: boolean;
 }
 
 /**
@@ -3559,8 +3652,19 @@ export interface ItemPromoDto {
   volumeEnabled: boolean;
   /** Скидка на первую заявку включена в магазине */
   firstOrderEnabled: boolean;
-  /** Распродажа позиции действует и на оптовую цену */
+  /**
+     * Товар в оптовой распродаже — прежнее имя признака, для старых экранов
+     * @deprecated
+     */
   includeWholesale: boolean;
+  /** Продаётся ли товар в розницу — по режиму магазина и своему: только такому даётся розничная скидка */
+  sellsRetail: boolean;
+  /** Продаётся ли товар оптом (режим разрешает и данные опта полные): только такому даётся оптовая скидка */
+  sellsWholesale: boolean;
+  /** Скидка оптовой распродажи, %; пусто — не в ней */
+  wholesaleSalePercent?: number;
+  /** Оптовая распродажа магазина — справкой, как поля распродажи выше */
+  wholesaleSale: ItemPromoWholesaleSale;
 }
 
 /**
@@ -3773,7 +3877,7 @@ export interface ItemSaleTerms {
   hit: boolean;
   /** Метка «Новинка» */
   novelty: boolean;
-  /** Продаётся только с 21 года */
+  /** Есть ограничение по возрасту покупателя; с какого возраста — `minAge` */
   ageRestricted: boolean;
   /**
      * Наименьшее количество в заявке, в единицах позиции; пусто — без минимума
@@ -3787,6 +3891,8 @@ export interface ItemSaleTerms {
   quantityStep?: number;
   /** С какого дня позиция отмечена новинкой. Ставит сервер при включении метки «Новинка»; в запросе на сохранение не учитывается */
   noveltySince?: string;
+  /** С какого возраста продаётся: 18, 21… Кабинет показывает «21+» на фото и в карточке. Пусто — без ограничения. В запросе на сохранение не учитывается: возраст задают `ageRule` и `minAge` позиции */
+  minAge?: number;
 }
 
 /**
@@ -3897,6 +4003,8 @@ export interface ShowcaseVariantDto {
   fields: CustomerFieldDto[];
   /** Снимки и ролики варианта — в карточке: при выборе цвета клиент видит его картинки. На плитке витрины пусто */
   media?: ItemMediaDto[];
+  /** Артикул цвета варианта («AZA01-BL») — для строки «Арт.» всех цветов модели; пусто — у варианта его нет */
+  article?: string;
 }
 
 /**
@@ -3925,6 +4033,10 @@ export interface ShowcaseWholesaleDto {
   retail: boolean;
   /** Ступени цены по возрастанию «от» */
   tiers: Tier[];
+  /** Одежда оптом — линейками: штук в полной линейке; пусто — опт не линейками */
+  linePieces?: number;
+  /** Цена штуки в линейке первой ступени — её показывают крупно (решение владельца 2026-11-14); пусто — опт не линейками */
+  piecePrice?: number;
 }
 
 /**
@@ -4333,6 +4445,16 @@ export interface SnapshotLineDto {
   pack?: LinePackItem[];
   /** Позиции сейчас нет, склад обещал её к этой дате, и продавец решил подождать: строка в сумме, клиенту — «будет к дате». Пусто — позиция есть */
   expectedOn?: string;
+  /** Цена до распродажи или своей цены клиента — зачёркнутая у него в корзине при подаче; пусто — скидки на строку не было */
+  listPrice?: number;
+  /** Линейка опта одежды: строки размеров с одним ключом — одна линейка; пусто — строка сама по себе */
+  lineKey?: string;
+  /** Сколько линеек взято; пусто — строка не из линейки */
+  lines?: number;
+  /** Продавец поменял состав линейки против отправленного клиентом — «линейка изменена»; пусто — не менял или строка не из линейки */
+  lineChanged?: boolean;
+  /** Подпись варианта позиции — цвет и размер («Чёрный · 48»), как в корзине; пусто — у позиции нет вариантов */
+  variantLabel?: string;
 }
 
 /**
@@ -4687,28 +4809,15 @@ export interface SetPortalCityRequest {
 }
 
 /**
- * «В розницу» или «Оптом» у позиции, которая продаётся и так, и так. Пусто — у новой строки «В розницу», у лежащей — прежний режим
+ * Число линеек опта одежды; ноль убирает линейку
  */
-export type SetCartLineRequestMode = typeof SetCartLineRequestMode[keyof typeof SetCartLineRequestMode];
-
-
-export const SetCartLineRequestMode = {
-  RETAIL: 'RETAIL',
-  WHOLESALE: 'WHOLESALE',
-} as const;
-
-/**
- * Количество позиции в корзине; ноль убирает строку
- */
-export interface SetCartLineRequest {
+export interface SetWholesaleLinesRequest {
   /**
-     * Количество в розничных единицах позиции (штуках). В режиме «Оптом» — целые упаковки по цене ступени, остаток в розницу. Ноль убирает строку
+     * Линеек цвета модели
      * @minimum 0
-     * @maximum 999999999.9999
+     * @maximum 999
      */
-  quantity: number;
-  /** «В розницу» или «Оптом» у позиции, которая продаётся и так, и так. Пусто — у новой строки «В розницу», у лежащей — прежний режим */
-  mode?: SetCartLineRequestMode;
+  lines: number;
 }
 
 /**
@@ -4811,6 +4920,38 @@ export const CartLineDtoMode = {
 } as const;
 
 /**
+ * Размер в линейке корзины
+ */
+export interface WholesaleLineSize {
+  /** Позиция размера */
+  itemId: string;
+  /** Подпись размера */
+  label: string;
+  /** Штук этого размера в корзине или заявке */
+  quantity: number;
+}
+
+/**
+ * Линейка опта одежды: размеры одного цвета модели одной строкой
+ */
+export interface WholesaleLineDto {
+  /** Модель и цвет — общий у всех строк линейки */
+  key: string;
+  /** Сколько линеек */
+  lines: number;
+  /** Штук в одной полной линейке */
+  pieces: number;
+  /** Цена одной линейки */
+  linePrice: number;
+  /** Цена штуки в линейке — её показывают крупно (решение владельца 2026-11-14) */
+  piecePrice: number;
+  /** Размеры линейки в порядке ряда */
+  sizes: WholesaleLineSize[];
+  /** Сколько полных линеек можно заказать (по самому скудному размеру) — больше «+» не даёт; пусто — остаток не ведётся */
+  availableLines?: number;
+}
+
+/**
  * Строка корзины
  */
 export interface CartLineDto {
@@ -4860,6 +5001,8 @@ export interface CartLineDto {
   modelKey?: string;
   /** Переключатель «В розницу / Оптом» у позиции, которая продаётся и так, и так: RETAIL — розничная цена при любом количестве, WHOLESALE — опт модели. Пусто — выбора нет (только розница, только опт или своя цена клиента) */
   mode?: CartLineDtoMode;
+  /** Линейка опта одежды, в которую входит строка; пусто — строка сама по себе */
+  line?: WholesaleLineDto;
 }
 
 /**
@@ -4872,6 +5015,8 @@ export interface SkippedLineDto {
   name: string;
   /** Почему не добавлено: позиции больше нет в продаже либо у неё пропала цена */
   reason: string;
+  /** Линейка опта одежды не вошла, но столько полных линеек взять можно — кнопка «Взять N линеек» (2026-11-15); пусто — предложить нечего */
+  takeLines?: number;
 }
 
 /**
@@ -4918,6 +5063,33 @@ export interface CartDto {
   vatIncluded: boolean;
   /** Заявка на такую сумму выйдет за кредитный лимит клиента у продавца — отгрузку продавец подтвердит отдельно. Только признак: ни долга, ни лимита корзина не называет */
   creditLimitExceeded: boolean;
+  /** Какой возраст покупатель подтвердил («мне есть 18»); пусто — не подтверждал. Товар с `terms.minAge` больше этого числа кабинет спрашивает ещё раз */
+  confirmedAge?: number;
+}
+
+/**
+ * «В розницу» или «Оптом» у позиции, которая продаётся и так, и так. Пусто — у новой строки «В розницу», у лежащей — прежний режим
+ */
+export type SetCartLineRequestMode = typeof SetCartLineRequestMode[keyof typeof SetCartLineRequestMode];
+
+
+export const SetCartLineRequestMode = {
+  RETAIL: 'RETAIL',
+  WHOLESALE: 'WHOLESALE',
+} as const;
+
+/**
+ * Количество позиции в корзине; ноль убирает строку
+ */
+export interface SetCartLineRequest {
+  /**
+     * Количество в розничных единицах позиции (штуках). В режиме «Оптом» — целые упаковки по цене ступени, остаток в розницу. Ноль убирает строку
+     * @minimum 0
+     * @maximum 999999999.9999
+     */
+  quantity: number;
+  /** «В розницу» или «Оптом» у позиции, которая продаётся и так, и так. Пусто — у новой строки «В розницу», у лежащей — прежний режим */
+  mode?: SetCartLineRequestMode;
 }
 
 /**
@@ -5787,6 +5959,10 @@ export interface DraftLineDto {
   requestedProperties?: PropertyCheckDto[];
   /** Артикул цвета позиции строки — его видит менеджер («Арт. LOW-CIT · M»); `sku` — код размера для склада. Пусто — артикула цвета нет */
   article?: string;
+  /** Линейка опта одежды: строки размеров с одним ключом — одна линейка (модель и цвет); пусто — строка сама по себе */
+  lineKey?: string;
+  /** Сколько линеек взял клиент; пусто — строка не из линейки */
+  lineCount?: number;
 }
 
 /**
@@ -5853,6 +6029,8 @@ export interface DraftDiscountDto {
   kind: DraftDiscountDtoKind;
   /** Процент от суммы товаров */
   percent: number;
+  /** Скидка оптовой заявки: берётся со всех строк, а не только с розничных — у опта своя скидка (решение владельца 2026-11-13) */
+  wholesale: boolean;
 }
 
 /**
@@ -6596,6 +6774,8 @@ export interface CustomerPriceTermDto {
   itemId?: string;
   /** Название товара; пусто — товар удалён */
   itemName?: string;
+  /** Артикул товара — различает размеры и цвета одной модели с общим названием */
+  itemSku?: string;
   categoryId?: string;
   /** Название категории; пусто — категория удалена */
   categoryName?: string;
@@ -6820,6 +7000,62 @@ export interface SellerUnitDto {
 export interface ReorderSellerUnitsRequest {
   /** Все единицы в новом порядке; чужие и неизвестные пропускаются */
   ids: string[];
+}
+
+/**
+ * Переводы по коду языка; пустая строка снимает перевод, не присланный язык не меняется
+ */
+export type SaveSectionEntryRequestNames = {[key: string]: string};
+
+/**
+ * Название раздела справочника и переводы
+ */
+export interface SaveSectionEntryRequest {
+  /**
+     * Название по-русски
+     * @minLength 0
+     * @maxLength 255
+     */
+  name: string;
+  /** Раздел справочника, внутрь которого кладётся подраздел (только при заведении) */
+  parentId?: string;
+  /** Переводы по коду языка; пустая строка снимает перевод, не присланный язык не меняется */
+  names?: SaveSectionEntryRequestNames;
+}
+
+/**
+ * Названия по коду языка, русский всегда есть
+ */
+export type SectionEntryDtoNames = {[key: string]: string};
+
+/**
+ * Строка «Справочника разделов»: название на языках и фото; разложена ли в каталог
+ */
+export interface SectionEntryDto {
+  id: string;
+  /** Раздел справочника, в который входит этот подраздел; пусто — раздел верхнего уровня */
+  parentId?: string;
+  /** Название по-русски */
+  name: string;
+  /** Названия по коду языка, русский всегда есть */
+  names: SectionEntryDtoNames;
+  imageUrl?: string;
+  imageSrc?: string;
+  sortOrder: number;
+  /** Раздел каталога из этой строки; пусто — в каталог ещё не разложен */
+  categoryId?: string;
+}
+
+/**
+ * Картинка раздела каталога
+ */
+export interface SetCategoryImageRequest {
+  /**
+     * Загруженный файл `/api/files/<id>` (ответ загрузки картинки раздела) или публичная ссылка https на картинку, в том числе на файл Google Диска. Пусто — убрать картинку
+     * @minLength 0
+     * @maxLength 2048
+     */
+  imageUrl?: string;
 }
 
 /**
@@ -7211,6 +7447,136 @@ export interface ModelVariantsResult {
 }
 
 /**
+ * Мерка
+ */
+export type SizeChartRowMeasure = typeof SizeChartRowMeasure[keyof typeof SizeChartRowMeasure];
+
+
+export const SizeChartRowMeasure = {
+  MAKER: 'MAKER',
+  EUR: 'EUR',
+  AGE: 'AGE',
+  HEIGHT: 'HEIGHT',
+  CHEST: 'CHEST',
+  WAIST: 'WAIST',
+  HIPS: 'HIPS',
+  NECK: 'NECK',
+  INSEAM: 'INSEAM',
+  CUSTOM: 'CUSTOM',
+} as const;
+
+/**
+ * Значения по коду размера, текст до 20 знаков: «96», «56-58»
+ */
+export type SizeChartRowValues = {[key: string]: string};
+
+/**
+ * Строка-мерка
+ */
+export interface SizeChartRow {
+  /** Мерка */
+  measure: SizeChartRowMeasure;
+  /**
+     * Название своей мерки (CUSTOM); у прочих пусто
+     * @minLength 0
+     * @maxLength 40
+     */
+  label?: string;
+  /** Значения по коду размера, текст до 20 знаков: «96», «56-58» */
+  values: SizeChartRowValues;
+}
+
+/**
+ * Таблица размеров модели
+ */
+export interface SaveSizeChartRequest {
+  /**
+     * Строки-мерки по порядку; не больше 12
+     * @minItems 0
+     * @maxItems 12
+     */
+  rows: SizeChartRow[];
+}
+
+/**
+ * Размер модели
+ */
+export interface SizeChartColumn {
+  /** Код размера — ключ значений строк */
+  code: string;
+  /** Подпись размера */
+  label: string;
+  /** Международный размер по общей таблице; пусто — не определить */
+  intl?: string;
+}
+
+/**
+ * Таблица размеров модели
+ */
+export interface SizeChartDto {
+  /** Размеры модели по порядку ряда */
+  sizes: SizeChartColumn[];
+  /** Строки-мерки; пусто — таблицу не заполняли */
+  rows: SizeChartRow[];
+  /** Код размера позиции, по которой открыта таблица, — его строку подсвечивают; пусто — у позиции нет размера */
+  current?: string;
+}
+
+/**
+ * Штук размера в линейке
+ */
+export interface ColourLineSizeQty {
+  /** Позиция размера этого цвета */
+  itemId: string;
+  /**
+     * Штук в одной линейке
+     * @minimum 1
+     * @maximum 999
+     */
+  lineQty: number;
+}
+
+/**
+ * Сохранить линейку опта цвета модели
+ */
+export interface SaveColourLineRequest {
+  /**
+     * Линеек цвета для опта; пусто — по остатку размеров, как раньше
+     * @minimum 0
+     * @maximum 100000
+     */
+  lines?: number;
+  /** Штук в линейке по размерам; размер не назван — не меняется */
+  sizes: ColourLineSizeQty[];
+}
+
+/**
+ * Размер в линейке
+ */
+export interface ColourLineSize {
+  /** Позиция размера */
+  itemId: string;
+  /** Размер */
+  label: string;
+  /** Штук этого размера в одной линейке */
+  lineQty: number;
+  /** Остаток размера на складе, шт; пусто — остаток не ведётся */
+  stock?: number;
+  /** Останется в рознице: остаток минус линейки × штук в линейке; пусто — остаток не ведётся */
+  retail?: number;
+}
+
+/**
+ * Линейка опта цвета модели: запас линеек и состав
+ */
+export interface ColourLineDto {
+  /** Линеек цвета для опта; пусто — линейки считаются по остатку размеров */
+  lines?: number;
+  /** Размеры цвета по порядку ряда */
+  sizes: ColourLineSize[];
+}
+
+/**
  * Порядок показа медиа позиции
  */
 export interface ReorderItemMediaRequest {
@@ -7293,6 +7659,8 @@ export interface ItemWholesale {
   packQty?: number;
   /** Ступени цены по возрастанию «от»; пусто — ступеней нет */
   tiers?: WholesaleTier[];
+  /** Штук этого размера в одной линейке опта одежды; в запросе пусто — не менять */
+  lineQty?: number;
 }
 
 /**
@@ -7424,6 +7792,14 @@ export interface SaveCatalogItemRequest {
   article?: string;
   /** «Только с 21 года» у товара: INHERIT — как в разделе, ADULT — только с 21 года, ANY — можно и младше 21 года. Отсутствие ключа означает «не трогать»; старые клиенты шлют `terms.ageRestricted` — `true` читается как ADULT */
   ageRule?: SaveCatalogItemRequestAgeRule;
+  /**
+     * С какого возраста продаётся товар при `ageRule` = ADULT: 18, 21… Пусто — 21. При других правилах не учитывается
+     * @minimum 1
+     * @maximum 99
+     */
+  minAge?: number;
+  /** Правка пришла из таблицы каталога («Изменить таблицу»), а не из карточки: корректировка остатка в истории склада подписывается «Исправлено в таблице каталога». Пусто — как из карточки */
+  fromCatalogTable?: boolean;
 }
 
 /**
@@ -7710,6 +8086,10 @@ export interface CatalogItemCardDto {
   ageRule: CatalogItemCardDtoAgeRule;
   /** Стоит ли «только с 21 года» у раздела товара или выше — что значит «как в разделе» */
   categoryAgeRestricted: boolean;
+  /** Свой возраст товара при `ageRule` = ADULT; пусто — 21 */
+  minAge?: number;
+  /** С какого возраста продаются товары раздела, если у раздела или выше стоит ограничение; пусто — ограничения в разделе нет */
+  categoryMinAge?: number;
 }
 
 /**
@@ -7883,6 +8263,12 @@ export interface SaveItemCategoryRequest {
   ageRestricted?: boolean;
   /** Переводы по коду языка, например {"kk": "Көйлектер", "en": "Dresses"}. Русский всегда берётся из name. Пустая строка снимает перевод; язык, которого нет в запросе, не меняется */
   names?: SaveItemCategoryRequestNames;
+  /**
+     * С какого возраста продаются товары раздела при `ageRestricted`: 18, 21… Не прислали — как было; у нового раздела — 21
+     * @minimum 1
+     * @maximum 99
+     */
+  minAge?: number;
 }
 
 /**
@@ -7912,18 +8298,8 @@ export interface ItemCategoryDto {
   ageRestricted: boolean;
   /** Название по коду языка: {"ru": …, "kk": …, "en": …}; ru есть всегда, перевода нет — ключа нет, показывается русский */
   names: ItemCategoryDtoNames;
-}
-
-/**
- * Картинка раздела каталога
- */
-export interface SetCategoryImageRequest {
-  /**
-     * Загруженный файл `/api/files/<id>` (ответ загрузки картинки раздела) или публичная ссылка https на картинку, в том числе на файл Google Диска. Пусто — убрать картинку
-     * @minLength 0
-     * @maxLength 2048
-     */
-  imageUrl?: string;
+  /** С какого возраста продаются товары раздела при `ageRestricted`: 18, 21…; без ограничения — пусто */
+  minAge?: number;
 }
 
 /**
@@ -10798,6 +11174,10 @@ export interface ConfirmationLineDto {
   requestedQuantity?: number;
   /** Позиции сейчас нет, продавец ждёт её к этой дате; пусто — есть */
   expectedOn?: string;
+  /** Цена до распродажи или своей цены клиента, зачёркнутая у него в корзине при подаче; пусто — скидки на строку не было */
+  listPrice?: number;
+  lineKey?: string;
+  lines?: number;
 }
 
 /**
@@ -11089,6 +11469,67 @@ export interface DataRequestDto {
   customerPhone?: string;
 }
 
+/**
+ * Вид задачи по клиенту
+ */
+export type CreateCustomerTaskRequestKind = typeof CreateCustomerTaskRequestKind[keyof typeof CreateCustomerTaskRequestKind];
+
+
+export const CreateCustomerTaskRequestKind = {
+  CALL: 'CALL',
+  MEETING: 'MEETING',
+  OTHER: 'OTHER',
+} as const;
+
+/**
+ * Новая задача по клиенту
+ */
+export interface CreateCustomerTaskRequest {
+  /** Вид задачи по клиенту */
+  kind: CreateCustomerTaskRequestKind;
+  /**
+     * Что именно сделать
+     * @minLength 0
+     * @maxLength 500
+     */
+  note?: string;
+  /** К какому дню; пусто — без срока */
+  dueOn?: string;
+}
+
+/**
+ * Вид задачи по клиенту
+ */
+export type CustomerTaskDtoKind = typeof CustomerTaskDtoKind[keyof typeof CustomerTaskDtoKind];
+
+
+export const CustomerTaskDtoKind = {
+  CALL: 'CALL',
+  MEETING: 'MEETING',
+  OTHER: 'OTHER',
+} as const;
+
+/**
+ * Задача менеджеру по клиенту
+ */
+export interface CustomerTaskDto {
+  id: string;
+  customerId: string;
+  /** Название клиента, без названия — телефон */
+  customerName: string;
+  /** Вид задачи по клиенту */
+  kind: CustomerTaskDtoKind;
+  /** Что именно сделать */
+  note?: string;
+  /** К какому дню; пусто — без срока */
+  dueOn?: string;
+  assigneeId: string;
+  /** Имя исполнителя */
+  assigneeName?: string;
+  /** Когда выполнена; пусто — открыта */
+  doneAt?: string;
+}
+
 export interface ErasureReport {
   customerId?: string;
   erasedMessages?: number;
@@ -11230,6 +11671,29 @@ export interface AccessRequestDto {
 }
 
 /**
+ * Одна и та же задача по многим клиентам — например, по «пропавшим» из аналитики
+ */
+export interface CreateCustomerTasksRequest {
+  /**
+     * @minItems 0
+     * @maxItems 5000
+     */
+  customerIds: string[];
+  task: CreateCustomerTaskRequest;
+}
+
+/**
+ * Строки справочника, которые разложить в каталог
+ */
+export interface PlaceSectionsRequest {
+  /**
+     * @minItems 0
+     * @maxItems 200
+     */
+  ids: string[];
+}
+
+/**
  * Непригодная строка файла: где она и что в ней не так
  */
 export interface ImportProblemDto {
@@ -11241,6 +11705,12 @@ export interface ImportProblemDto {
   column?: string;
   /** Текст причины, человеческим языком */
   message: string;
+  /** Поле клетки с ошибкой (код ImportColumn); пусто — поле не определить */
+  field?: string;
+  /** Что сейчас написано в этой клетке файла */
+  value?: string;
+  /** Наименование из этой строки файла — по нему человек узнаёт строку */
+  name?: string;
 }
 
 /**
@@ -11515,6 +11985,8 @@ export interface CategoryNodeDto {
   ageRestricted: boolean;
   /** Название по коду языка: {"ru": …, "kk": …, "en": …}; ru есть всегда, перевода нет — ключа нет, показывается русский */
   names: CategoryNodeDtoNames;
+  /** С какого возраста продаются товары раздела при `ageRestricted`: 18, 21…; без ограничения — пусто */
+  minAge?: number;
 }
 
 /**
@@ -11550,6 +12022,43 @@ export interface ImportUndoDto {
 }
 
 /**
+ * Поле, клетку которого правят
+ */
+export type CellFixColumn = typeof CellFixColumn[keyof typeof CellFixColumn];
+
+
+export const CellFixColumn = {
+  SKU: 'SKU',
+  NAME: 'NAME',
+  UNIT: 'UNIT',
+  PRICE: 'PRICE',
+  VAT_RATE: 'VAT_RATE',
+  STOCK_QUANTITY: 'STOCK_QUANTITY',
+  EXTERNAL_ID_1C: 'EXTERNAL_ID_1C',
+  CATEGORY: 'CATEGORY',
+  DESCRIPTION: 'DESCRIPTION',
+  BARCODE: 'BARCODE',
+} as const;
+
+/**
+ * Исправление клетки файла: строка, поле и новое значение
+ */
+export interface CellFix {
+  /** Номер строки, как в ImportProblemDto.rowNumber */
+  rowNumber: number;
+  /** Лист шаблона по структуре; пусто — лист с товарами */
+  sheet?: string;
+  /** Поле, клетку которого правят */
+  column: CellFixColumn;
+  /**
+     * Новое значение клетки
+     * @minLength 0
+     * @maxLength 1000
+     */
+  value: string;
+}
+
+/**
  * Индекс колонки в файле, считая с нуля, для каждого распознанного поля. Отсутствующий ключ означает, что поле не сопоставлено ни с одной колонкой и в каталог не попадёт; без наименования импорт не подтверждается
  */
 export type ColumnMappingColumns = {[key: string]: number};
@@ -11572,6 +12081,12 @@ export interface CommitImportRequest {
   updateStock?: boolean;
   /** Пропустить строки с ошибками и записать остальные. `false` — файл с ошибками не записывается вовсе, ответ 400 `CATALOG_IMPORT_HAS_PROBLEMS` */
   skipProblemRows?: boolean;
+  /**
+     * Исправления клеток с экрана проверки; пусто — файл как есть
+     * @minItems 0
+     * @maxItems 500
+     */
+  fixes?: CellFix[];
 }
 
 /**
@@ -11621,6 +12136,10 @@ export interface ImportRow {
   categoryId?: string;
   /** Значения полей категории по коду поля — только из непустых ячеек: пустая ячейка значит «про поле ничего не сказано» и прежнее значение позиции не стирает. Вариант списка уже переведён из подписи в код */
   fieldValues?: ImportRowFieldValues;
+  /** Описание для клиента. Пусто, если колонка не сопоставлена или ячейка пуста */
+  description?: string;
+  /** Штрихкод из файла. Пусто, если колонка не сопоставлена или ячейка пуста */
+  barcode?: string;
 }
 
 /**
@@ -11651,6 +12170,22 @@ export interface ImportPreview {
   unchangedRows: number;
   /** Сколько строк-образцов шаблона («Пример: …») пропущено: в каталог они не попадают и в остальные счётчики не входят */
   skippedSamples: number;
+  /** Сколько годных строк сменят остаток уже заведённой позиции с учётом остатка — если человек согласится записать остатки из файла */
+  restockRows: number;
+  /** Первые непустые строки данных файла как есть, ячейка в ячейку с `columns`: по ним человек видит свой файл и проверяет, что куда загрузится */
+  sampleRows: string[][];
+}
+
+/**
+ * Штрихкод из файла, не добавленный товару: он уже у другого товара
+ */
+export interface SkippedBarcodeDto {
+  /** Код из файла */
+  code: string;
+  /** Товар из строки файла, которому код не добавлен */
+  itemName: string;
+  /** Товар, у которого этот код уже есть */
+  takenBy: string;
 }
 
 /**
@@ -11673,6 +12208,8 @@ export interface ImportResultDto {
   undoUntil?: string;
   /** Колонка остатка пропущена: остатки ведутся в 1С */
   stockIgnored: boolean;
+  /** Штрихкоды из файла, которые не добавлены: они уже у других товаров */
+  skippedBarcodes: SkippedBarcodeDto[];
 }
 
 /**
@@ -12626,6 +13163,12 @@ export interface TemplateLineDto {
   minQuantity?: number;
   /** Кратность количества; пусто — любое */
   quantityStep?: number;
+  /** Подпись варианта — цвет и размер */
+  variantLabel?: string;
+  /** Линейка опта одежды, в которую входит размер (модель и цвет) — экран правки показывает её одной строкой числом линеек (2026-11-15); пусто — не линейка */
+  lineKey?: string;
+  /** Штук этого размера в одной линейке */
+  lineQty?: number;
 }
 
 /**
@@ -13108,6 +13651,8 @@ export interface FavoriteItemDto {
   oldPrice?: number;
   /** Скидка распродажи, %; пусто — скидки нет */
   discountPercent?: number;
+  /** Опт товара, как на плитке витрины: у одежды линейками — `linePieces` и цена штуки; избранное кладёт её линейками (2026-11-15). Пусто — опта нет или позиция недоступна */
+  wholesale?: ShowcaseWholesaleDto;
 }
 
 /**
@@ -13279,6 +13824,34 @@ export interface PageResponseShowcaseItemDto {
 }
 
 /**
+ * Размер в линейке карточки
+ */
+export interface CardLineSize {
+  /** Подпись размера */
+  label: string;
+  /** Штук этого размера в линейке */
+  quantity: number;
+  /** Не хватает на линейку — полную линейку сейчас заказать нельзя */
+  missing: boolean;
+}
+
+/**
+ * Линейка опта одежды: состав и цена
+ */
+export interface CardLineDto {
+  /** Штук в полной линейке */
+  pieces: number;
+  /** Размеры линейки по порядку ряда */
+  sizes: CardLineSize[];
+  /** Цена одной полной линейки первой ступени — с распродажей опта */
+  linePrice: number;
+  /** Цена одной штуки в линейке — её показывают крупно */
+  piecePrice: number;
+  /** Сколько полных линеек можно заказать (по самому скудному размеру); пусто — остаток не ведётся */
+  availableLines?: number;
+}
+
+/**
  * Наличие в том виде, который выбрал поставщик. Пусто, когда он решил наличие не показывать
  */
 export type ShowcaseCardDtoStock = typeof ShowcaseCardDtoStock[keyof typeof ShowcaseCardDtoStock];
@@ -13365,6 +13938,12 @@ export interface ShowcaseCardDto {
   article?: string;
   /** Цена уже с НДС (продавец-плательщик с режимом «в цене»): кабинет пишет «с НДС», а не «без НДС, +ставка» */
   vatIncluded: boolean;
+  /** Линейка опта одежды: в «Оптом» размер не выбирают, количество — линейками; пусто — товар не одежда или оптом не продаётся */
+  line?: CardLineDto;
+  /** Таблица размеров модели от продавца; пусто — не заполняли */
+  sizeChart?: SizeChartDto;
+  /** Сетка размеров одежды по полю «Для кого»: WOMEN, MEN или UNISEX — по ней буквенный размер переводится в RUS/INT/EUR; пусто — не одежда или не задано */
+  sizeGrid?: string;
 }
 
 /**
@@ -14196,6 +14775,14 @@ export interface CatalogItemRowDto {
   missing: CatalogItemRowDtoMissingItem[];
   /** Артикул цвета; пусто — нет, артикулом служит `sku` (код размера) */
   article?: string;
+  /** Оптовая цена за единицу — первая ступень опта; пусто — опта нет */
+  wholesalePrice?: number;
+  /** Оптовая единица, за которую цена `wholesalePrice`; пусто — опта нет */
+  wholesaleUnitId?: string;
+  /** Описание для клиента */
+  description?: string;
+  /** С какого возраста продаётся: значок «21+» на фото; пусто — без ограничения */
+  ageLimit?: number;
 }
 
 /**
@@ -14226,6 +14813,8 @@ export interface CatalogItemPickDto {
   unit: string;
   /** Цена за единицу; пусто, если цена не назначена */
   price?: number;
+  /** Артикул; пусто, если не задан */
+  sku?: string;
 }
 
 /**
@@ -14299,6 +14888,10 @@ export interface CatalogBoardSummary {
   uncategorized: number;
   /** Позиций по рубрикам: идентификатор рубрики → число. Рубрик без позиций в словаре нет */
   byCategory: CatalogBoardSummaryByCategory;
+  /** Неполных: без цены, фото, описания или раздела — хоть чего-то не хватает */
+  incomplete: number;
+  /** Нет в наличии: учёт остатка ведётся, а остаток 0 или меньше */
+  outOfStock: number;
 }
 
 /**
@@ -15487,7 +16080,10 @@ export interface CustomersPageDto {
   rows: CustomerRowDto[];
   /** Ключ следующей страницы; пусто — страница последняя */
   next?: string;
+  /** Первые 50 «пропавших» по выручке в месяц */
   lost: LostCustomerDto[];
+  /** Все «пропавшие», не больше 5000 — кому ставить задачу «Позвонить» */
+  lostIds: string[];
 }
 
 /**
@@ -15680,6 +16276,22 @@ export type ForgetPushDeviceParams = {
 token: string;
 };
 
+export type RemovePromoItemParams = {
+/**
+ * Из какой распродажи: RETAIL или WHOLESALE; не передано — из обеих
+ */
+channel?: RemovePromoItemChannel;
+};
+
+export type RemovePromoItemChannel = typeof RemovePromoItemChannel[keyof typeof RemovePromoItemChannel];
+
+
+export const RemovePromoItemChannel = {
+  RETAIL: 'RETAIL',
+  WHOLESALE: 'WHOLESALE',
+  BOTH: 'BOTH',
+} as const;
+
 export type ForgetPortalPushDeviceParams = {
 token: string;
 };
@@ -15835,6 +16447,15 @@ export const RepeatLastPortalOrderMode = {
   RETAIL: 'RETAIL',
   WHOLESALE: 'WHOLESALE',
 } as const;
+
+export type ConfirmPortalAgeParams = {
+/**
+ * Какой возраст подтверждает покупатель; пусто — 21
+ * @minimum 1
+ * @maximum 99
+ */
+age?: number;
+};
 
 export type GetDraftQueueParams = {
 status?: GetDraftQueueStatus;
@@ -16200,6 +16821,22 @@ from: string;
 to: string;
 };
 
+export type GetPortalPromotionsParams = {
+/**
+ * Вид продажи: RETAIL — розница (по умолчанию), WHOLESALE — опт
+ */
+mode?: GetPortalPromotionsMode;
+};
+
+export type GetPortalPromotionsMode = typeof GetPortalPromotionsMode[keyof typeof GetPortalPromotionsMode];
+
+
+export const GetPortalPromotionsMode = {
+  RETAIL: 'RETAIL',
+  WHOLESALE: 'WHOLESALE',
+  BOTH: 'BOTH',
+} as const;
+
 export type SearchPortalMapPlacesParams = {
 /**
  * Адрес словами
@@ -16347,6 +16984,10 @@ categoryId?: string;
  * Наличие — как у `getPortalCatalog`: IN_STOCK (по умолчанию), ALL, OUT_OF_STOCK
  */
 presence?: GetPortalCatalogFiltersPresence;
+/**
+ * RETAIL — только в розницу (штуками, опта нет); WHOLESALE — только оптом (упаковками); BOTH — и штуками, и оптом; ANY_WHOLESALE — всё, что можно заказать оптом (WHOLESALE + BOTH); ANY_RETAIL — всё, что можно заказать штуками (RETAIL + BOTH)
+ */
+channel?: GetPortalCatalogFiltersChannel;
 };
 
 export type GetPortalCatalogFiltersPresence = typeof GetPortalCatalogFiltersPresence[keyof typeof GetPortalCatalogFiltersPresence];
@@ -16356,6 +16997,17 @@ export const GetPortalCatalogFiltersPresence = {
   IN_STOCK: 'IN_STOCK',
   ALL: 'ALL',
   OUT_OF_STOCK: 'OUT_OF_STOCK',
+} as const;
+
+export type GetPortalCatalogFiltersChannel = typeof GetPortalCatalogFiltersChannel[keyof typeof GetPortalCatalogFiltersChannel];
+
+
+export const GetPortalCatalogFiltersChannel = {
+  RETAIL: 'RETAIL',
+  WHOLESALE: 'WHOLESALE',
+  BOTH: 'BOTH',
+  ANY_WHOLESALE: 'ANY_WHOLESALE',
+  ANY_RETAIL: 'ANY_RETAIL',
 } as const;
 
 export type GetPortalCatalogCountsParams = {
@@ -16388,6 +17040,22 @@ export const GetPortalCatalogCountsPresence = {
   IN_STOCK: 'IN_STOCK',
   ALL: 'ALL',
   OUT_OF_STOCK: 'OUT_OF_STOCK',
+} as const;
+
+export type GetPortalCartPartParams = {
+/**
+ * Режим строки корзины: RETAIL — всегда розничная цена; WHOLESALE — опт модели со ступенями (недобор до ступени — розница с подсказкой)
+ */
+mode?: GetPortalCartPartMode;
+itemIds?: string[];
+};
+
+export type GetPortalCartPartMode = typeof GetPortalCartPartMode[keyof typeof GetPortalCartPartMode];
+
+
+export const GetPortalCartPartMode = {
+  RETAIL: 'RETAIL',
+  WHOLESALE: 'WHOLESALE',
 } as const;
 
 export type ListOrdersParams = {
@@ -16628,7 +17296,7 @@ categoryId?: string;
 visibility?: GetCatalogBoardVisibility;
 gaps?: GetCatalogBoardGapsItem[];
 /**
- * Порядок: по названию, по названию с конца, по цене, по цене с конца, сначала неполные, сначала новые
+ * Порядок: по названию, по названию с конца, по цене, по цене с конца, сначала неполные, сначала новые, по остатку, по остатку с конца, по опту, по опту с конца, по артикулу, по артикулу с конца, сначала скрытые, сначала видимые
  */
 sort?: GetCatalogBoardSort;
 /**
@@ -16636,6 +17304,14 @@ sort?: GetCatalogBoardSort;
  */
 group?: GetCatalogBoardGroup;
 archived?: boolean;
+/**
+ * Только позиции с учётом остатка, которых нет в наличии (остаток 0 или меньше)
+ */
+outOfStock?: boolean;
+/**
+ * Сначала по разделу в порядке дерева, внутри — по `sort`: группа раздела не рвётся между страницами
+ */
+bySection?: boolean;
 page?: number;
 size?: number;
 };
@@ -16673,6 +17349,14 @@ export const GetCatalogBoardSort = {
   PRICE_DESC: 'PRICE_DESC',
   INCOMPLETE_FIRST: 'INCOMPLETE_FIRST',
   NEWEST: 'NEWEST',
+  STOCK: 'STOCK',
+  STOCK_DESC: 'STOCK_DESC',
+  WHOLESALE: 'WHOLESALE',
+  WHOLESALE_DESC: 'WHOLESALE_DESC',
+  SKU: 'SKU',
+  SKU_DESC: 'SKU_DESC',
+  VISIBLE: 'VISIBLE',
+  VISIBLE_DESC: 'VISIBLE_DESC',
 } as const;
 
 export type GetCatalogBoardGroup = typeof GetCatalogBoardGroup[keyof typeof GetCatalogBoardGroup];
@@ -30359,7 +31043,8 @@ export const getPutPromoItemUrl = (itemId: string,) => {
  * **Как проверить вручную**
  *
  * 1. Отправить `{"percent": 20}` на позицию с ценой 49 990 — `salePrice` 39 992.
- * 2. Негативный 404: случайный идентификатор позиции.
+ * 2. `{"wholesalePercent": 10}` товару «только в розницу» — 400.
+ * 3. Негативный 404: случайный идентификатор позиции.
  * @summary Поставить товар в распродажу
  */
 export const putPromoItem = async (itemId: string,
@@ -30469,12 +31154,20 @@ export type removePromoItemResponseError = (removePromoItemResponse400 | removeP
 
 export type removePromoItemResponse = (removePromoItemResponseSuccess | removePromoItemResponseError)
 
-export const getRemovePromoItemUrl = (itemId: string,) => {
+export const getRemovePromoItemUrl = (itemId: string,
+    params?: RemovePromoItemParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/promotions/items/${itemId}`
+  return stringifiedParams.length > 0 ? `/api/promotions/items/${itemId}?${stringifiedParams}` : `/api/promotions/items/${itemId}`
 }
 
 /**
@@ -30485,9 +31178,10 @@ export const getRemovePromoItemUrl = (itemId: string,) => {
  * 1. Убрать товар — его нет в списке. Повтор — 404.
  * @summary Убрать товар из распродажи
  */
-export const removePromoItem = async (itemId: string, options?: Parameters<typeof apiRequest>[1]): Promise<removePromoItemResponse> => {
+export const removePromoItem = async (itemId: string,
+    params?: RemovePromoItemParams, options?: Parameters<typeof apiRequest>[1]): Promise<removePromoItemResponse> => {
 
-  return apiRequest<removePromoItemResponse>(getRemovePromoItemUrl(itemId),
+  return apiRequest<removePromoItemResponse>(getRemovePromoItemUrl(itemId,params),
   {
     ...options,
     method: 'DELETE'
@@ -30517,9 +31211,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof removePromoItem>>, RemovePromoItemMutationVariables> = (props) => {
-          const {itemId} = props ?? {};
+          const {itemId,params} = props ?? {};
 
-          return  removePromoItem(itemId,requestOptions)
+          return  removePromoItem(itemId,params,requestOptions)
         }
 
 
@@ -30532,7 +31226,7 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type RemovePromoItemMutationResult = NonNullable<Awaited<ReturnType<typeof removePromoItem>>>
 
     export type RemovePromoItemMutationError = ErrorResponse
-    export type RemovePromoItemMutationVariables = {itemId: string}
+    export type RemovePromoItemMutationVariables = {itemId: string;params?: RemovePromoItemParams}
 
     /**
  * @summary Убрать товар из распродажи
@@ -33380,6 +34074,137 @@ export const useSetPortalCity = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getSetPortalCityMutationOptions(options), queryClient);
+    }
+
+export type putPortalCartWholesaleLinesResponse200 = {
+  data: CartDto
+  status: 200
+}
+
+export type putPortalCartWholesaleLinesResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type putPortalCartWholesaleLinesResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type putPortalCartWholesaleLinesResponse422 = {
+  data: ErrorResponse
+  status: 422
+}
+
+export type putPortalCartWholesaleLinesResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type putPortalCartWholesaleLinesResponseSuccess = (putPortalCartWholesaleLinesResponse200) & {
+  headers: Headers;
+};
+export type putPortalCartWholesaleLinesResponseError = (putPortalCartWholesaleLinesResponse400 | putPortalCartWholesaleLinesResponse404 | putPortalCartWholesaleLinesResponse422 | putPortalCartWholesaleLinesResponse500) & {
+  headers: Headers;
+};
+
+export type putPortalCartWholesaleLinesResponse = (putPortalCartWholesaleLinesResponseSuccess | putPortalCartWholesaleLinesResponseError)
+
+export const getPutPortalCartWholesaleLinesUrl = (itemId: string,) => {
+
+
+
+
+  return `/api/portal/cart/wholesale-lines/${itemId}`
+}
+
+/**
+ * Одежда оптом продаётся линейками — размерами одного цвета модели по числу штук, заданному продавцом (решение владельца 2026-11-14). Кладёт у каждого размера цвета строку «Оптом» на число линеек × штук размера в линейке; размер без свободного остатка в линейку не идёт. Цена — за линейку по ступеням в линейках. Ноль убирает линейку. Позицию можно назвать любую из размеров цвета.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. У модели одежды (рубрика из отрасли «Одежда») синий 48·1, 50·2, 52·1 и опт «от 1 — 70 000» отправить `{"lines":2}` для любого синего размера — три строки 2, 4, 2, все `WHOLESALE`.
+ * 2. Отправить `{"lines":0}` — строк линейки нет.
+ * 3. Негативный 404: позиция не из одежды.
+ * 4. Негативный 422 `PORTAL_QUANTITY_NOT_ALLOWED`: линеек меньше первой ступени.
+ * @summary «Оптом»: линейки одежды в корзину
+ */
+export const putPortalCartWholesaleLines = async (itemId: string,
+    setWholesaleLinesRequest: SetWholesaleLinesRequest, options?: Parameters<typeof apiRequest>[1]): Promise<putPortalCartWholesaleLinesResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiRequest<putPortalCartWholesaleLinesResponse>(getPutPortalCartWholesaleLinesUrl(itemId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(setWholesaleLinesRequest)
+  }
+);}
+
+
+
+
+
+export const getPutPortalCartWholesaleLinesMutationKey = () => ['putPortalCartWholesaleLines'] as const;
+
+export const getPutPortalCartWholesaleLinesMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putPortalCartWholesaleLines>>, TError,PutPortalCartWholesaleLinesMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof putPortalCartWholesaleLines>>, TError,PutPortalCartWholesaleLinesMutationVariables, TContext> => {
+
+const mutationKey = getPutPortalCartWholesaleLinesMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof putPortalCartWholesaleLines>>, PutPortalCartWholesaleLinesMutationVariables> = (props) => {
+          const {itemId,data} = props ?? {};
+
+          return  putPortalCartWholesaleLines(itemId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PutPortalCartWholesaleLinesMutationResult = NonNullable<Awaited<ReturnType<typeof putPortalCartWholesaleLines>>>
+    export type PutPortalCartWholesaleLinesMutationBody = SetWholesaleLinesRequest
+    export type PutPortalCartWholesaleLinesMutationError = ErrorResponse
+    export type PutPortalCartWholesaleLinesMutationVariables = {itemId: string;data: SetWholesaleLinesRequest}
+
+    /**
+ * @summary «Оптом»: линейки одежды в корзину
+ */
+export const usePutPortalCartWholesaleLines = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof putPortalCartWholesaleLines>>, TError,PutPortalCartWholesaleLinesMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof putPortalCartWholesaleLines>>,
+        TError,
+        PutPortalCartWholesaleLinesMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPutPortalCartWholesaleLinesMutationOptions(options), queryClient);
     }
 
 export type setPortalCartLineResponse200 = {
@@ -37332,6 +38157,223 @@ export const useSetShopShowcase = <TError = ErrorResponse,
       return useMutation(getSetShopShowcaseMutationOptions(options), queryClient);
     }
 
+export type completeCustomerTaskResponse204 = {
+  data: void
+  status: 204
+}
+
+export type completeCustomerTaskResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type completeCustomerTaskResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type completeCustomerTaskResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type completeCustomerTaskResponseSuccess = (completeCustomerTaskResponse204) & {
+  headers: Headers;
+};
+export type completeCustomerTaskResponseError = (completeCustomerTaskResponse400 | completeCustomerTaskResponse404 | completeCustomerTaskResponse500) & {
+  headers: Headers;
+};
+
+export type completeCustomerTaskResponse = (completeCustomerTaskResponseSuccess | completeCustomerTaskResponseError)
+
+export const getCompleteCustomerTaskUrl = (id: string,) => {
+
+
+
+
+  return `/api/customer-tasks/${id}/done`
+}
+
+/**
+ *
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Вызвать — 204, у задачи появился `doneAt`.
+ * 2. Негативный 404 `CUSTOMER_TASK_NOT_FOUND`: задача клиента другого продавца.
+ * @summary Задача выполнена
+ */
+export const completeCustomerTask = async (id: string, options?: Parameters<typeof apiRequest>[1]): Promise<completeCustomerTaskResponse> => {
+
+  return apiRequest<completeCustomerTaskResponse>(getCompleteCustomerTaskUrl(id),
+  {
+    ...options,
+    method: 'PUT'
+
+
+  }
+);}
+
+
+
+
+
+export const getCompleteCustomerTaskMutationKey = () => ['completeCustomerTask'] as const;
+
+export const getCompleteCustomerTaskMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeCustomerTask>>, TError,CompleteCustomerTaskMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof completeCustomerTask>>, TError,CompleteCustomerTaskMutationVariables, TContext> => {
+
+const mutationKey = getCompleteCustomerTaskMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof completeCustomerTask>>, CompleteCustomerTaskMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  completeCustomerTask(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CompleteCustomerTaskMutationResult = NonNullable<Awaited<ReturnType<typeof completeCustomerTask>>>
+
+    export type CompleteCustomerTaskMutationError = ErrorResponse
+    export type CompleteCustomerTaskMutationVariables = {id: string}
+
+    /**
+ * @summary Задача выполнена
+ */
+export const useCompleteCustomerTask = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof completeCustomerTask>>, TError,CompleteCustomerTaskMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof completeCustomerTask>>,
+        TError,
+        CompleteCustomerTaskMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCompleteCustomerTaskMutationOptions(options), queryClient);
+    }
+
+export type reopenCustomerTaskResponse204 = {
+  data: void
+  status: 204
+}
+
+export type reopenCustomerTaskResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type reopenCustomerTaskResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type reopenCustomerTaskResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type reopenCustomerTaskResponseSuccess = (reopenCustomerTaskResponse204) & {
+  headers: Headers;
+};
+export type reopenCustomerTaskResponseError = (reopenCustomerTaskResponse400 | reopenCustomerTaskResponse404 | reopenCustomerTaskResponse500) & {
+  headers: Headers;
+};
+
+export type reopenCustomerTaskResponse = (reopenCustomerTaskResponseSuccess | reopenCustomerTaskResponseError)
+
+export const getReopenCustomerTaskUrl = (id: string,) => {
+
+
+
+
+  return `/api/customer-tasks/${id}/done`
+}
+
+/**
+ *
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Отметить выполненной, затем вызвать — 204, `doneAt` снова пуст.
+ * @summary Вернуть задачу в работу
+ */
+export const reopenCustomerTask = async (id: string, options?: Parameters<typeof apiRequest>[1]): Promise<reopenCustomerTaskResponse> => {
+
+  return apiRequest<reopenCustomerTaskResponse>(getReopenCustomerTaskUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getReopenCustomerTaskMutationKey = () => ['reopenCustomerTask'] as const;
+
+export const getReopenCustomerTaskMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopenCustomerTask>>, TError,ReopenCustomerTaskMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof reopenCustomerTask>>, TError,ReopenCustomerTaskMutationVariables, TContext> => {
+
+const mutationKey = getReopenCustomerTaskMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof reopenCustomerTask>>, ReopenCustomerTaskMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  reopenCustomerTask(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ReopenCustomerTaskMutationResult = NonNullable<Awaited<ReturnType<typeof reopenCustomerTask>>>
+
+    export type ReopenCustomerTaskMutationError = ErrorResponse
+    export type ReopenCustomerTaskMutationVariables = {id: string}
+
+    /**
+ * @summary Вернуть задачу в работу
+ */
+export const useReopenCustomerTask = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof reopenCustomerTask>>, TError,ReopenCustomerTaskMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof reopenCustomerTask>>,
+        TError,
+        ReopenCustomerTaskMutationVariables,
+        TContext
+      > => {
+      return useMutation(getReopenCustomerTaskMutationOptions(options), queryClient);
+    }
+
 export type getCatalogSettingsResponse200 = {
   data: CatalogSettingsDto
   status: 200
@@ -38090,6 +39132,259 @@ export const useReorderSellerUnits = <TError = ErrorResponse,
       return useMutation(getReorderSellerUnitsMutationOptions(options), queryClient);
     }
 
+export type updateSectionEntryResponse200 = {
+  data: SectionEntryDto
+  status: 200
+}
+
+export type updateSectionEntryResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type updateSectionEntryResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type updateSectionEntryResponse409 = {
+  data: ErrorResponse
+  status: 409
+}
+
+export type updateSectionEntryResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type updateSectionEntryResponseSuccess = (updateSectionEntryResponse200) & {
+  headers: Headers;
+};
+export type updateSectionEntryResponseError = (updateSectionEntryResponse400 | updateSectionEntryResponse404 | updateSectionEntryResponse409 | updateSectionEntryResponse500) & {
+  headers: Headers;
+};
+
+export type updateSectionEntryResponse = (updateSectionEntryResponseSuccess | updateSectionEntryResponseError)
+
+export const getUpdateSectionEntryUrl = (id: string,) => {
+
+
+
+
+  return `/api/catalog/section-dictionary/${id}`
+}
+
+/**
+ * Правка уходит и в разделы каталога из этой строки — клиенты видят её сразу. `parentId` здесь не меняется.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Прислать `{"name": "Платья", "names": {"kk": "Көйлектер"}}` — у раздела каталога «Платья» тот же перевод.
+ * 2. Негативный 409: имя соседней строки.
+ * @summary Поправить название или перевод
+ */
+export const updateSectionEntry = async (id: string,
+    saveSectionEntryRequest: SaveSectionEntryRequest, options?: Parameters<typeof apiRequest>[1]): Promise<updateSectionEntryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiRequest<updateSectionEntryResponse>(getUpdateSectionEntryUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveSectionEntryRequest)
+  }
+);}
+
+
+
+
+
+export const getUpdateSectionEntryMutationKey = () => ['updateSectionEntry'] as const;
+
+export const getUpdateSectionEntryMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSectionEntry>>, TError,UpdateSectionEntryMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSectionEntry>>, TError,UpdateSectionEntryMutationVariables, TContext> => {
+
+const mutationKey = getUpdateSectionEntryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSectionEntry>>, UpdateSectionEntryMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateSectionEntry(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSectionEntryMutationResult = NonNullable<Awaited<ReturnType<typeof updateSectionEntry>>>
+    export type UpdateSectionEntryMutationBody = SaveSectionEntryRequest
+    export type UpdateSectionEntryMutationError = ErrorResponse
+    export type UpdateSectionEntryMutationVariables = {id: string;data: SaveSectionEntryRequest}
+
+    /**
+ * @summary Поправить название или перевод
+ */
+export const useUpdateSectionEntry = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSectionEntry>>, TError,UpdateSectionEntryMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateSectionEntry>>,
+        TError,
+        UpdateSectionEntryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateSectionEntryMutationOptions(options), queryClient);
+    }
+
+export type setSectionEntryImageResponse200 = {
+  data: SectionEntryDto
+  status: 200
+}
+
+export type setSectionEntryImageResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type setSectionEntryImageResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type setSectionEntryImageResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type setSectionEntryImageResponseSuccess = (setSectionEntryImageResponse200) & {
+  headers: Headers;
+};
+export type setSectionEntryImageResponseError = (setSectionEntryImageResponse400 | setSectionEntryImageResponse404 | setSectionEntryImageResponse500) & {
+  headers: Headers;
+};
+
+export type setSectionEntryImageResponse = (setSectionEntryImageResponseSuccess | setSectionEntryImageResponseError)
+
+export const getSetSectionEntryImageUrl = (id: string,) => {
+
+
+
+
+  return `/api/catalog/section-dictionary/${id}/image`
+}
+
+/**
+ * Как у раздела: загруженный файл `/api/files/<id>` (`uploadCatalogCategoryImage`) или ссылка https; пусто — убрать. Фото уходит и в разделы каталога из этой строки.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Загрузить картинку, прислать её `url` — `imageSrc` тот же, у раздела каталога тоже.
+ * 2. Негативный 400 `CATALOG_CATEGORY_IMAGE_UNKNOWN`: чужой файл.
+ * @summary Поставить или убрать фото строки
+ */
+export const setSectionEntryImage = async (id: string,
+    setCategoryImageRequest: SetCategoryImageRequest, options?: Parameters<typeof apiRequest>[1]): Promise<setSectionEntryImageResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiRequest<setSectionEntryImageResponse>(getSetSectionEntryImageUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(setCategoryImageRequest)
+  }
+);}
+
+
+
+
+
+export const getSetSectionEntryImageMutationKey = () => ['setSectionEntryImage'] as const;
+
+export const getSetSectionEntryImageMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setSectionEntryImage>>, TError,SetSectionEntryImageMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof setSectionEntryImage>>, TError,SetSectionEntryImageMutationVariables, TContext> => {
+
+const mutationKey = getSetSectionEntryImageMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setSectionEntryImage>>, SetSectionEntryImageMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  setSectionEntryImage(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetSectionEntryImageMutationResult = NonNullable<Awaited<ReturnType<typeof setSectionEntryImage>>>
+    export type SetSectionEntryImageMutationBody = SetCategoryImageRequest
+    export type SetSectionEntryImageMutationError = ErrorResponse
+    export type SetSectionEntryImageMutationVariables = {id: string;data: SetCategoryImageRequest}
+
+    /**
+ * @summary Поставить или убрать фото строки
+ */
+export const useSetSectionEntryImage = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setSectionEntryImage>>, TError,SetSectionEntryImageMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setSectionEntryImage>>,
+        TError,
+        SetSectionEntryImageMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSetSectionEntryImageMutationOptions(options), queryClient);
+    }
+
 export type getPriceHintResponse200 = {
   data: PriceHintSettingsDto
   status: 200
@@ -38744,6 +40039,538 @@ export const useSaveCatalogModelVariants = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getSaveCatalogModelVariantsMutationOptions(options), queryClient);
+    }
+
+export type getModelSizeChartResponse200 = {
+  data: SizeChartDto
+  status: 200
+}
+
+export type getModelSizeChartResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getModelSizeChartResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type getModelSizeChartResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getModelSizeChartResponseSuccess = (getModelSizeChartResponse200) & {
+  headers: Headers;
+};
+export type getModelSizeChartResponseError = (getModelSizeChartResponse400 | getModelSizeChartResponse404 | getModelSizeChartResponse500) & {
+  headers: Headers;
+};
+
+export type getModelSizeChartResponse = (getModelSizeChartResponseSuccess | getModelSizeChartResponseError)
+
+export const getGetModelSizeChartUrl = (itemId: string,) => {
+
+
+
+
+  return `/api/catalog/models/${itemId}/size-chart`
+}
+
+/**
+ * Размеры ряда модели (код, подпись, международный размер по общей таблице) и строки-мерки продавца со значениями по коду размера. Одна таблица на модель — открывается по любому её варианту. Не заполняли — `rows` пуст.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Завести модель одежды «48-52» и вызвать для любой позиции — `sizes` 48, 50, 52, у 48 `intl` «M/L», `rows` пуст.
+ * 2. Негативный 404 `CATALOG_ITEM_NOT_FOUND`: случайный идентификатор.
+ * @summary Таблица размеров модели
+ */
+export const getModelSizeChart = async (itemId: string, options?: Parameters<typeof apiRequest>[1]): Promise<getModelSizeChartResponse> => {
+
+  return apiRequest<getModelSizeChartResponse>(getGetModelSizeChartUrl(itemId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetModelSizeChartQueryKey = (itemId: string,) => {
+    return [
+    `/api/catalog/models/${itemId}/size-chart`
+    ] as const;
+    }
+
+
+export const getGetModelSizeChartQueryOptions = <TData = Awaited<ReturnType<typeof getModelSizeChart>>, TError = ErrorResponse>(itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getModelSizeChart>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetModelSizeChartQueryKey(itemId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getModelSizeChart>>> = ({ signal }) => getModelSizeChart(itemId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: itemId !== null && itemId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getModelSizeChart>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetModelSizeChartQueryResult = NonNullable<Awaited<ReturnType<typeof getModelSizeChart>>>
+export type GetModelSizeChartQueryError = ErrorResponse
+
+
+export function useGetModelSizeChart<TData = Awaited<ReturnType<typeof getModelSizeChart>>, TError = ErrorResponse>(
+ itemId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getModelSizeChart>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getModelSizeChart>>,
+          TError,
+          Awaited<ReturnType<typeof getModelSizeChart>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetModelSizeChart<TData = Awaited<ReturnType<typeof getModelSizeChart>>, TError = ErrorResponse>(
+ itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getModelSizeChart>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getModelSizeChart>>,
+          TError,
+          Awaited<ReturnType<typeof getModelSizeChart>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetModelSizeChart<TData = Awaited<ReturnType<typeof getModelSizeChart>>, TError = ErrorResponse>(
+ itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getModelSizeChart>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Таблица размеров модели
+ */
+
+export function useGetModelSizeChart<TData = Awaited<ReturnType<typeof getModelSizeChart>>, TError = ErrorResponse>(
+ itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getModelSizeChart>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetModelSizeChartQueryOptions(itemId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type saveModelSizeChartResponse200 = {
+  data: SizeChartDto
+  status: 200
+}
+
+export type saveModelSizeChartResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type saveModelSizeChartResponse403 = {
+  data: ErrorResponse
+  status: 403
+}
+
+export type saveModelSizeChartResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type saveModelSizeChartResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type saveModelSizeChartResponseSuccess = (saveModelSizeChartResponse200) & {
+  headers: Headers;
+};
+export type saveModelSizeChartResponseError = (saveModelSizeChartResponse400 | saveModelSizeChartResponse403 | saveModelSizeChartResponse404 | saveModelSizeChartResponse500) & {
+  headers: Headers;
+};
+
+export type saveModelSizeChartResponse = (saveModelSizeChartResponseSuccess | saveModelSizeChartResponseError)
+
+export const getSaveModelSizeChartUrl = (itemId: string,) => {
+
+
+
+
+  return `/api/catalog/models/${itemId}/size-chart`
+}
+
+/**
+ * Строки целиком (не больше 12): мерка (`CHEST`, `WAIST`… или `CUSTOM` со своим названием) и значения по коду размера, текст до 20 знаков. Пишется во все позиции модели; пустой список таблицу убирает. Клиент видит таблицу в карточке товара.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Отправить `{"rows":[{"measure":"CHEST","values":{"RU48":"96"}}]}` — 200; другая позиция модели отдаёт ту же строку.
+ * 2. Негативный 400 `CATALOG_SIZE_CHART_INVALID`: `CUSTOM` без названия или код размера, которого у модели нет.
+ * 3. Негативный 403: роль без права менять каталог.
+ * @summary Сохранить таблицу размеров модели
+ */
+export const saveModelSizeChart = async (itemId: string,
+    saveSizeChartRequest: SaveSizeChartRequest, options?: Parameters<typeof apiRequest>[1]): Promise<saveModelSizeChartResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiRequest<saveModelSizeChartResponse>(getSaveModelSizeChartUrl(itemId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveSizeChartRequest)
+  }
+);}
+
+
+
+
+
+export const getSaveModelSizeChartMutationKey = () => ['saveModelSizeChart'] as const;
+
+export const getSaveModelSizeChartMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveModelSizeChart>>, TError,SaveModelSizeChartMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveModelSizeChart>>, TError,SaveModelSizeChartMutationVariables, TContext> => {
+
+const mutationKey = getSaveModelSizeChartMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveModelSizeChart>>, SaveModelSizeChartMutationVariables> = (props) => {
+          const {itemId,data} = props ?? {};
+
+          return  saveModelSizeChart(itemId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveModelSizeChartMutationResult = NonNullable<Awaited<ReturnType<typeof saveModelSizeChart>>>
+    export type SaveModelSizeChartMutationBody = SaveSizeChartRequest
+    export type SaveModelSizeChartMutationError = ErrorResponse
+    export type SaveModelSizeChartMutationVariables = {itemId: string;data: SaveSizeChartRequest}
+
+    /**
+ * @summary Сохранить таблицу размеров модели
+ */
+export const useSaveModelSizeChart = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveModelSizeChart>>, TError,SaveModelSizeChartMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof saveModelSizeChart>>,
+        TError,
+        SaveModelSizeChartMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveModelSizeChartMutationOptions(options), queryClient);
+    }
+
+export type getColourLineResponse200 = {
+  data: ColourLineDto
+  status: 200
+}
+
+export type getColourLineResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getColourLineResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type getColourLineResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getColourLineResponseSuccess = (getColourLineResponse200) & {
+  headers: Headers;
+};
+export type getColourLineResponseError = (getColourLineResponse400 | getColourLineResponse404 | getColourLineResponse500) & {
+  headers: Headers;
+};
+
+export type getColourLineResponse = (getColourLineResponseSuccess | getColourLineResponseError)
+
+export const getGetColourLineUrl = (itemId: string,) => {
+
+
+
+
+  return `/api/catalog/models/${itemId}/line`
+}
+
+/**
+ * Запас линеек цвета позиции для опта и штук каждого размера в одной линейке; у размера — остаток на складе и сколько останется рознице (остаток минус линейки × штук).
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Позиция одежды с размерами — 200, `sizes` — размеры её цвета.
+ * 2. Негативный 404 `CATALOG_ITEM_NOT_FOUND`: позиция не одежда или без размера.
+ * @summary Линейка опта цвета модели
+ */
+export const getColourLine = async (itemId: string, options?: Parameters<typeof apiRequest>[1]): Promise<getColourLineResponse> => {
+
+  return apiRequest<getColourLineResponse>(getGetColourLineUrl(itemId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetColourLineQueryKey = (itemId: string,) => {
+    return [
+    `/api/catalog/models/${itemId}/line`
+    ] as const;
+    }
+
+
+export const getGetColourLineQueryOptions = <TData = Awaited<ReturnType<typeof getColourLine>>, TError = ErrorResponse>(itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getColourLine>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetColourLineQueryKey(itemId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getColourLine>>> = ({ signal }) => getColourLine(itemId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: itemId !== null && itemId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getColourLine>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetColourLineQueryResult = NonNullable<Awaited<ReturnType<typeof getColourLine>>>
+export type GetColourLineQueryError = ErrorResponse
+
+
+export function useGetColourLine<TData = Awaited<ReturnType<typeof getColourLine>>, TError = ErrorResponse>(
+ itemId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getColourLine>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getColourLine>>,
+          TError,
+          Awaited<ReturnType<typeof getColourLine>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetColourLine<TData = Awaited<ReturnType<typeof getColourLine>>, TError = ErrorResponse>(
+ itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getColourLine>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getColourLine>>,
+          TError,
+          Awaited<ReturnType<typeof getColourLine>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetColourLine<TData = Awaited<ReturnType<typeof getColourLine>>, TError = ErrorResponse>(
+ itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getColourLine>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Линейка опта цвета модели
+ */
+
+export function useGetColourLine<TData = Awaited<ReturnType<typeof getColourLine>>, TError = ErrorResponse>(
+ itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getColourLine>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetColourLineQueryOptions(itemId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type saveColourLineResponse200 = {
+  data: ColourLineDto
+  status: 200
+}
+
+export type saveColourLineResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type saveColourLineResponse403 = {
+  data: ErrorResponse
+  status: 403
+}
+
+export type saveColourLineResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type saveColourLineResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type saveColourLineResponseSuccess = (saveColourLineResponse200) & {
+  headers: Headers;
+};
+export type saveColourLineResponseError = (saveColourLineResponse400 | saveColourLineResponse403 | saveColourLineResponse404 | saveColourLineResponse500) & {
+  headers: Headers;
+};
+
+export type saveColourLineResponse = (saveColourLineResponseSuccess | saveColourLineResponseError)
+
+export const getSaveColourLineUrl = (itemId: string,) => {
+
+
+
+
+  return `/api/catalog/models/${itemId}/line`
+}
+
+/**
+ * Отдельное количество для опта (требование владельца 2026-11-15): `lines` — линеек цвета для опта, пишется всем размерам цвета; `sizes` — штук размера в линейке. Розница получает остаток размера минус линейки × штук. Пустое `lines` — линейки по остатку размеров.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Отправить `{"lines":6,"sizes":[{"itemId":"…","lineQty":2}]}` — 200, у клиента «Оптом» — «Свободно: 6 линеек».
+ * 2. Негативный 400 `CATALOG_ITEM_WHOLESALE_INCOMPLETE`: размер другого цвета.
+ * 3. Негативный 403: роль без права менять каталог.
+ * @summary Сохранить линейку опта цвета модели
+ */
+export const saveColourLine = async (itemId: string,
+    saveColourLineRequest: SaveColourLineRequest, options?: Parameters<typeof apiRequest>[1]): Promise<saveColourLineResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiRequest<saveColourLineResponse>(getSaveColourLineUrl(itemId),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveColourLineRequest)
+  }
+);}
+
+
+
+
+
+export const getSaveColourLineMutationKey = () => ['saveColourLine'] as const;
+
+export const getSaveColourLineMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveColourLine>>, TError,SaveColourLineMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof saveColourLine>>, TError,SaveColourLineMutationVariables, TContext> => {
+
+const mutationKey = getSaveColourLineMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof saveColourLine>>, SaveColourLineMutationVariables> = (props) => {
+          const {itemId,data} = props ?? {};
+
+          return  saveColourLine(itemId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SaveColourLineMutationResult = NonNullable<Awaited<ReturnType<typeof saveColourLine>>>
+    export type SaveColourLineMutationBody = SaveColourLineRequest
+    export type SaveColourLineMutationError = ErrorResponse
+    export type SaveColourLineMutationVariables = {itemId: string;data: SaveColourLineRequest}
+
+    /**
+ * @summary Сохранить линейку опта цвета модели
+ */
+export const useSaveColourLine = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof saveColourLine>>, TError,SaveColourLineMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof saveColourLine>>,
+        TError,
+        SaveColourLineMutationVariables,
+        TContext
+      > => {
+      return useMutation(getSaveColourLineMutationOptions(options), queryClient);
     }
 
 export type uploadItemVideoResponse201 = {
@@ -58240,27 +60067,35 @@ export type confirmPortalAgeResponseError = (confirmPortalAgeResponse400 | confi
 
 export type confirmPortalAgeResponse = (confirmPortalAgeResponseSuccess | confirmPortalAgeResponseError)
 
-export const getConfirmPortalAgeUrl = () => {
+export const getConfirmPortalAgeUrl = (params?: ConfirmPortalAgeParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/portal/cart/age-confirmation`
+  return stringifiedParams.length > 0 ? `/api/portal/cart/age-confirmation?${stringifiedParams}` : `/api/portal/cart/age-confirmation`
 }
 
 /**
- * Покупатель ответил «Да, мне есть 21 год». Отметка ставится один раз у этого магазина; после неё товары 21+ кладутся в корзину. Документ всё равно проверяет продавец при получении.
+ * Покупатель ответил «Да, мне есть N лет» (N — `terms.minAge` товара, по умолчанию 21). Магазин помнит наибольший подтверждённый возраст (`confirmedAge` корзины): после него кладутся товары с возрастом не больше этого. Документ всё равно проверяет продавец при получении.
  *
  * **Как проверить вручную**
  *
  * 1. Положить товар 21+ — отказ 409.
- * 2. Вызвать этот адрес — в корзине `ageConfirmed` истинно; товар кладётся.
- * 3. Негативный 403: заголовок чужого поставщика.
- * @summary Подтвердить возраст 21+
+ * 2. Вызвать этот адрес с `age=18` — `confirmedAge` 18; товар 21+ всё ещё отказ 409, товар 18+ кладётся.
+ * 3. Вызвать с `age=21` — `confirmedAge` 21; товар 21+ кладётся.
+ * 4. Негативный 403: заголовок чужого поставщика.
+ * @summary Подтвердить возраст
  */
-export const confirmPortalAge = async ( options?: Parameters<typeof apiRequest>[1]): Promise<confirmPortalAgeResponse> => {
+export const confirmPortalAge = async (params?: ConfirmPortalAgeParams, options?: Parameters<typeof apiRequest>[1]): Promise<confirmPortalAgeResponse> => {
 
-  return apiRequest<confirmPortalAgeResponse>(getConfirmPortalAgeUrl(),
+  return apiRequest<confirmPortalAgeResponse>(getConfirmPortalAgeUrl(params),
   {
     ...options,
     method: 'POST'
@@ -58276,8 +60111,8 @@ export const confirmPortalAge = async ( options?: Parameters<typeof apiRequest>[
 export const getConfirmPortalAgeMutationKey = () => ['confirmPortalAge'] as const;
 
 export const getConfirmPortalAgeMutationOptions = <TError = ErrorResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmPortalAge>>, TError,void, TContext>, request?: SecondParameter<typeof apiRequest>}
-): UseMutationOptions<Awaited<ReturnType<typeof confirmPortalAge>>, TError,void, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmPortalAge>>, TError,ConfirmPortalAgeMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof confirmPortalAge>>, TError,ConfirmPortalAgeMutationVariables, TContext> => {
 
 const mutationKey = getConfirmPortalAgeMutationKey();
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -58289,10 +60124,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmPortalAge>>, void> = () => {
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmPortalAge>>, ConfirmPortalAgeMutationVariables> = (props) => {
+          const {params} = props ?? {};
 
-
-          return  confirmPortalAge(requestOptions)
+          return  confirmPortalAge(params,requestOptions)
         }
 
 
@@ -58305,17 +60140,17 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
     export type ConfirmPortalAgeMutationResult = NonNullable<Awaited<ReturnType<typeof confirmPortalAge>>>
 
     export type ConfirmPortalAgeMutationError = ErrorResponse
-
+    export type ConfirmPortalAgeMutationVariables = {params?: ConfirmPortalAgeParams}
 
     /**
- * @summary Подтвердить возраст 21+
+ * @summary Подтвердить возраст
  */
 export const useConfirmPortalAge = <TError = ErrorResponse,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmPortalAge>>, TError,void, TContext>, request?: SecondParameter<typeof apiRequest>}
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof confirmPortalAge>>, TError,ConfirmPortalAgeMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof confirmPortalAge>>,
         TError,
-        void,
+        ConfirmPortalAgeMutationVariables,
         TContext
       > => {
       return useMutation(getConfirmPortalAgeMutationOptions(options), queryClient);
@@ -68610,6 +70445,267 @@ export const useCloseDataRequest = <TError = ErrorResponse,
       return useMutation(getCloseDataRequestMutationOptions(options), queryClient);
     }
 
+export type listCustomerTasksResponse200 = {
+  data: CustomerTaskDto[]
+  status: 200
+}
+
+export type listCustomerTasksResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type listCustomerTasksResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type listCustomerTasksResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type listCustomerTasksResponseSuccess = (listCustomerTasksResponse200) & {
+  headers: Headers;
+};
+export type listCustomerTasksResponseError = (listCustomerTasksResponse400 | listCustomerTasksResponse404 | listCustomerTasksResponse500) & {
+  headers: Headers;
+};
+
+export type listCustomerTasksResponse = (listCustomerTasksResponseSuccess | listCustomerTasksResponseError)
+
+export const getListCustomerTasksUrl = (id: string,) => {
+
+
+
+
+  return `/api/customers/${id}/tasks`
+}
+
+/**
+ * Открытые — по сроку, без срока в конце; затем выполненные за последние 30 дней.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Поставить клиенту задачу — она в списке без `doneAt`.
+ * 2. Негативный 404 `CUSTOMER_NOT_FOUND`: клиент другого продавца.
+ * @summary Задачи клиента
+ */
+export const listCustomerTasks = async (id: string, options?: Parameters<typeof apiRequest>[1]): Promise<listCustomerTasksResponse> => {
+
+  return apiRequest<listCustomerTasksResponse>(getListCustomerTasksUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCustomerTasksQueryKey = (id: string,) => {
+    return [
+    `/api/customers/${id}/tasks`
+    ] as const;
+    }
+
+
+export const getListCustomerTasksQueryOptions = <TData = Awaited<ReturnType<typeof listCustomerTasks>>, TError = ErrorResponse>(id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCustomerTasks>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCustomerTasksQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCustomerTasks>>> = ({ signal }) => listCustomerTasks(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCustomerTasks>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListCustomerTasksQueryResult = NonNullable<Awaited<ReturnType<typeof listCustomerTasks>>>
+export type ListCustomerTasksQueryError = ErrorResponse
+
+
+export function useListCustomerTasks<TData = Awaited<ReturnType<typeof listCustomerTasks>>, TError = ErrorResponse>(
+ id: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCustomerTasks>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCustomerTasks>>,
+          TError,
+          Awaited<ReturnType<typeof listCustomerTasks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCustomerTasks<TData = Awaited<ReturnType<typeof listCustomerTasks>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCustomerTasks>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listCustomerTasks>>,
+          TError,
+          Awaited<ReturnType<typeof listCustomerTasks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListCustomerTasks<TData = Awaited<ReturnType<typeof listCustomerTasks>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCustomerTasks>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Задачи клиента
+ */
+
+export function useListCustomerTasks<TData = Awaited<ReturnType<typeof listCustomerTasks>>, TError = ErrorResponse>(
+ id: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listCustomerTasks>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListCustomerTasksQueryOptions(id,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type createCustomerTaskResponse201 = {
+  data: CustomerTaskDto
+  status: 201
+}
+
+export type createCustomerTaskResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type createCustomerTaskResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type createCustomerTaskResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type createCustomerTaskResponseSuccess = (createCustomerTaskResponse201) & {
+  headers: Headers;
+};
+export type createCustomerTaskResponseError = (createCustomerTaskResponse400 | createCustomerTaskResponse404 | createCustomerTaskResponse500) & {
+  headers: Headers;
+};
+
+export type createCustomerTaskResponse = (createCustomerTaskResponseSuccess | createCustomerTaskResponseError)
+
+export const getCreateCustomerTaskUrl = (id: string,) => {
+
+
+
+
+  return `/api/customers/${id}/tasks`
+}
+
+/**
+ * Исполнитель — продавец клиента, у ничьего — тот, кто ставит.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Отправить `{"kind":"CALL","note":"Спросить про заказ","dueOn":"<завтра>"}` — 201, задача в `GET /api/customer-tasks` у продавца клиента.
+ * 2. Негативный 400: заметка длиннее 500 символов.
+ * 3. Негативный 404 `CUSTOMER_NOT_FOUND`: клиент другого продавца.
+ * @summary Поставить задачу по клиенту
+ */
+export const createCustomerTask = async (id: string,
+    createCustomerTaskRequest: CreateCustomerTaskRequest, options?: Parameters<typeof apiRequest>[1]): Promise<createCustomerTaskResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiRequest<createCustomerTaskResponse>(getCreateCustomerTaskUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createCustomerTaskRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateCustomerTaskMutationKey = () => ['createCustomerTask'] as const;
+
+export const getCreateCustomerTaskMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomerTask>>, TError,CreateCustomerTaskMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCustomerTask>>, TError,CreateCustomerTaskMutationVariables, TContext> => {
+
+const mutationKey = getCreateCustomerTaskMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCustomerTask>>, CreateCustomerTaskMutationVariables> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  createCustomerTask(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCustomerTaskMutationResult = NonNullable<Awaited<ReturnType<typeof createCustomerTask>>>
+    export type CreateCustomerTaskMutationBody = CreateCustomerTaskRequest
+    export type CreateCustomerTaskMutationError = ErrorResponse
+    export type CreateCustomerTaskMutationVariables = {id: string;data: CreateCustomerTaskRequest}
+
+    /**
+ * @summary Поставить задачу по клиенту
+ */
+export const useCreateCustomerTask = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomerTask>>, TError,CreateCustomerTaskMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createCustomerTask>>,
+        TError,
+        CreateCustomerTaskMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateCustomerTaskMutationOptions(options), queryClient);
+    }
+
 export type eraseCustomerDataResponse200 = {
   data: ErasureReport
   status: 200
@@ -71154,6 +73250,265 @@ export const useApproveAccessRequest = <TError = ErrorResponse | AccessRequestDt
       return useMutation(getApproveAccessRequestMutationOptions(options), queryClient);
     }
 
+export type listMyCustomerTasksResponse200 = {
+  data: CustomerTaskDto[]
+  status: 200
+}
+
+export type listMyCustomerTasksResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type listMyCustomerTasksResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type listMyCustomerTasksResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type listMyCustomerTasksResponseSuccess = (listMyCustomerTasksResponse200) & {
+  headers: Headers;
+};
+export type listMyCustomerTasksResponseError = (listMyCustomerTasksResponse400 | listMyCustomerTasksResponse404 | listMyCustomerTasksResponse500) & {
+  headers: Headers;
+};
+
+export type listMyCustomerTasksResponse = (listMyCustomerTasksResponseSuccess | listMyCustomerTasksResponseError)
+
+export const getListMyCustomerTasksUrl = () => {
+
+
+
+
+  return `/api/customer-tasks`
+}
+
+/**
+ * Открытые задачи вошедшего сотрудника по сроку; без срока — в конце. Не больше 500.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Поставить задачу своему клиенту — она в списке.
+ * 2. Отметить её выполненной — её в списке нет.
+ * @summary Мои задачи
+ */
+export const listMyCustomerTasks = async ( options?: Parameters<typeof apiRequest>[1]): Promise<listMyCustomerTasksResponse> => {
+
+  return apiRequest<listMyCustomerTasksResponse>(getListMyCustomerTasksUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListMyCustomerTasksQueryKey = () => {
+    return [
+    `/api/customer-tasks`
+    ] as const;
+    }
+
+
+export const getListMyCustomerTasksQueryOptions = <TData = Awaited<ReturnType<typeof listMyCustomerTasks>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyCustomerTasks>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListMyCustomerTasksQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listMyCustomerTasks>>> = ({ signal }) => listMyCustomerTasks({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listMyCustomerTasks>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListMyCustomerTasksQueryResult = NonNullable<Awaited<ReturnType<typeof listMyCustomerTasks>>>
+export type ListMyCustomerTasksQueryError = ErrorResponse
+
+
+export function useListMyCustomerTasks<TData = Awaited<ReturnType<typeof listMyCustomerTasks>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyCustomerTasks>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMyCustomerTasks>>,
+          TError,
+          Awaited<ReturnType<typeof listMyCustomerTasks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListMyCustomerTasks<TData = Awaited<ReturnType<typeof listMyCustomerTasks>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyCustomerTasks>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listMyCustomerTasks>>,
+          TError,
+          Awaited<ReturnType<typeof listMyCustomerTasks>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListMyCustomerTasks<TData = Awaited<ReturnType<typeof listMyCustomerTasks>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyCustomerTasks>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Мои задачи
+ */
+
+export function useListMyCustomerTasks<TData = Awaited<ReturnType<typeof listMyCustomerTasks>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listMyCustomerTasks>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListMyCustomerTasksQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type createCustomerTasksResponse201 = {
+  data: number
+  status: 201
+}
+
+export type createCustomerTasksResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type createCustomerTasksResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type createCustomerTasksResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type createCustomerTasksResponseSuccess = (createCustomerTasksResponse201) & {
+  headers: Headers;
+};
+export type createCustomerTasksResponseError = (createCustomerTasksResponse400 | createCustomerTasksResponse404 | createCustomerTasksResponse500) & {
+  headers: Headers;
+};
+
+export type createCustomerTasksResponse = (createCustomerTasksResponseSuccess | createCustomerTasksResponseError)
+
+export const getCreateCustomerTasksUrl = () => {
+
+
+
+
+  return `/api/customer-tasks`
+}
+
+/**
+ * Одна и та же задача каждому клиенту из списка — например, всем «пропавшим» из аналитики. Каждая уходит продавцу своего клиента. Клиенты, которых сотрудник не видит, и удалённые пропускаются. Ответ — сколько задач поставлено.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Отправить `{"customerIds":[…],"task":{"kind":"CALL"}}` — 201 и число задач.
+ * 2. Негативный 400: пустой список или больше 5000 клиентов.
+ * @summary Задача многим клиентам
+ */
+export const createCustomerTasks = async (createCustomerTasksRequest: CreateCustomerTasksRequest, options?: Parameters<typeof apiRequest>[1]): Promise<createCustomerTasksResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiRequest<createCustomerTasksResponse>(getCreateCustomerTasksUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(createCustomerTasksRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateCustomerTasksMutationKey = () => ['createCustomerTasks'] as const;
+
+export const getCreateCustomerTasksMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomerTasks>>, TError,CreateCustomerTasksMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCustomerTasks>>, TError,CreateCustomerTasksMutationVariables, TContext> => {
+
+const mutationKey = getCreateCustomerTasksMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCustomerTasks>>, CreateCustomerTasksMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createCustomerTasks(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCustomerTasksMutationResult = NonNullable<Awaited<ReturnType<typeof createCustomerTasks>>>
+    export type CreateCustomerTasksMutationBody = CreateCustomerTasksRequest
+    export type CreateCustomerTasksMutationError = ErrorResponse
+    export type CreateCustomerTasksMutationVariables = {data: CreateCustomerTasksRequest}
+
+    /**
+ * @summary Задача многим клиентам
+ */
+export const useCreateCustomerTasks = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomerTasks>>, TError,CreateCustomerTasksMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createCustomerTasks>>,
+        TError,
+        CreateCustomerTasksMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateCustomerTasksMutationOptions(options), queryClient);
+    }
+
 export type listSellerUnitsResponse200 = {
   data: SellerUnitDto[]
   status: 200
@@ -71411,6 +73766,394 @@ export const useCreateSellerUnit = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getCreateSellerUnitMutationOptions(options), queryClient);
+    }
+
+export type getSectionDictionaryResponse200 = {
+  data: SectionEntryDto[]
+  status: 200
+}
+
+export type getSectionDictionaryResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getSectionDictionaryResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type getSectionDictionaryResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getSectionDictionaryResponseSuccess = (getSectionDictionaryResponse200) & {
+  headers: Headers;
+};
+export type getSectionDictionaryResponseError = (getSectionDictionaryResponse400 | getSectionDictionaryResponse404 | getSectionDictionaryResponse500) & {
+  headers: Headers;
+};
+
+export type getSectionDictionaryResponse = (getSectionDictionaryResponseSuccess | getSectionDictionaryResponseError)
+
+export const getGetSectionDictionaryUrl = () => {
+
+
+
+
+  return `/api/catalog/section-dictionary`
+}
+
+/**
+ * Все строки справочника арендатора плоским списком; подраздел ссылается на раздел `parentId`. `categoryId` — раздел каталога из этой строки; пусто — в каталог не разложена. Каждый раздел каталога есть в справочнике: заведённый любым путём попадает туда сам.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Войти администратором (`77010000101`), завести раздел «Шины» в каталоге — строка «Шины» с `categoryId` этого раздела.
+ * 2. Удалить раздел — строка осталась, `categoryId` пуст.
+ * 3. Войти другим арендатором — чужих строк нет.
+ * @summary Справочник разделов
+ */
+export const getSectionDictionary = async ( options?: Parameters<typeof apiRequest>[1]): Promise<getSectionDictionaryResponse> => {
+
+  return apiRequest<getSectionDictionaryResponse>(getGetSectionDictionaryUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSectionDictionaryQueryKey = () => {
+    return [
+    `/api/catalog/section-dictionary`
+    ] as const;
+    }
+
+
+export const getGetSectionDictionaryQueryOptions = <TData = Awaited<ReturnType<typeof getSectionDictionary>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSectionDictionary>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSectionDictionaryQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSectionDictionary>>> = ({ signal }) => getSectionDictionary({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSectionDictionary>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetSectionDictionaryQueryResult = NonNullable<Awaited<ReturnType<typeof getSectionDictionary>>>
+export type GetSectionDictionaryQueryError = ErrorResponse
+
+
+export function useGetSectionDictionary<TData = Awaited<ReturnType<typeof getSectionDictionary>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSectionDictionary>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSectionDictionary>>,
+          TError,
+          Awaited<ReturnType<typeof getSectionDictionary>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetSectionDictionary<TData = Awaited<ReturnType<typeof getSectionDictionary>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSectionDictionary>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getSectionDictionary>>,
+          TError,
+          Awaited<ReturnType<typeof getSectionDictionary>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetSectionDictionary<TData = Awaited<ReturnType<typeof getSectionDictionary>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSectionDictionary>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Справочник разделов
+ */
+
+export function useGetSectionDictionary<TData = Awaited<ReturnType<typeof getSectionDictionary>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getSectionDictionary>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetSectionDictionaryQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export type createSectionEntryResponse201 = {
+  data: SectionEntryDto
+  status: 201
+}
+
+export type createSectionEntryResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type createSectionEntryResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type createSectionEntryResponse409 = {
+  data: ErrorResponse
+  status: 409
+}
+
+export type createSectionEntryResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type createSectionEntryResponseSuccess = (createSectionEntryResponse201) & {
+  headers: Headers;
+};
+export type createSectionEntryResponseError = (createSectionEntryResponse400 | createSectionEntryResponse404 | createSectionEntryResponse409 | createSectionEntryResponse500) & {
+  headers: Headers;
+};
+
+export type createSectionEntryResponse = (createSectionEntryResponseSuccess | createSectionEntryResponseError)
+
+export const getCreateSectionEntryUrl = () => {
+
+
+
+
+  return `/api/catalog/section-dictionary`
+}
+
+/**
+ * В каталог строка не попадает — её раскладывают отдельно (`placeSections`).
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Прислать `{"name": "Юбки", "parentId": <id «Женская одежда»>}` — 201, `categoryId` пуст.
+ * 2. Негативный 409 `CATALOG_CATEGORY_DUPLICATE`: ещё раз «юбки» туда же.
+ * @summary Добавить название в справочник
+ */
+export const createSectionEntry = async (saveSectionEntryRequest: SaveSectionEntryRequest, options?: Parameters<typeof apiRequest>[1]): Promise<createSectionEntryResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiRequest<createSectionEntryResponse>(getCreateSectionEntryUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(saveSectionEntryRequest)
+  }
+);}
+
+
+
+
+
+export const getCreateSectionEntryMutationKey = () => ['createSectionEntry'] as const;
+
+export const getCreateSectionEntryMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSectionEntry>>, TError,CreateSectionEntryMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof createSectionEntry>>, TError,CreateSectionEntryMutationVariables, TContext> => {
+
+const mutationKey = getCreateSectionEntryMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createSectionEntry>>, CreateSectionEntryMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createSectionEntry(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateSectionEntryMutationResult = NonNullable<Awaited<ReturnType<typeof createSectionEntry>>>
+    export type CreateSectionEntryMutationBody = SaveSectionEntryRequest
+    export type CreateSectionEntryMutationError = ErrorResponse
+    export type CreateSectionEntryMutationVariables = {data: SaveSectionEntryRequest}
+
+    /**
+ * @summary Добавить название в справочник
+ */
+export const useCreateSectionEntry = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createSectionEntry>>, TError,CreateSectionEntryMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createSectionEntry>>,
+        TError,
+        CreateSectionEntryMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateSectionEntryMutationOptions(options), queryClient);
+    }
+
+export type placeSectionsResponse200 = {
+  data: SectionEntryDto[]
+  status: 200
+}
+
+export type placeSectionsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type placeSectionsResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type placeSectionsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type placeSectionsResponseSuccess = (placeSectionsResponse200) & {
+  headers: Headers;
+};
+export type placeSectionsResponseError = (placeSectionsResponse400 | placeSectionsResponse404 | placeSectionsResponse500) & {
+  headers: Headers;
+};
+
+export type placeSectionsResponse = (placeSectionsResponseSuccess | placeSectionsResponseError)
+
+export const getPlaceSectionsUrl = () => {
+
+
+
+
+  return `/api/catalog/section-dictionary/place`
+}
+
+/**
+ * Каждая строка становится разделом каталога с её названием, переводами и фото. Подраздел тянет за собой свой раздел; уже разложенные не повторяются (повтор запроса безопасен).
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Прислать id подраздела «Юбки» — в каталоге «Женская одежда › Юбки», у строк `categoryId`.
+ * 2. Прислать тот же id ещё раз — новых разделов нет.
+ * @summary Разложить строки справочника в каталог
+ */
+export const placeSections = async (placeSectionsRequest: PlaceSectionsRequest, options?: Parameters<typeof apiRequest>[1]): Promise<placeSectionsResponse> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiRequest<placeSectionsResponse>(getPlaceSectionsUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(placeSectionsRequest)
+  }
+);}
+
+
+
+
+
+export const getPlaceSectionsMutationKey = () => ['placeSections'] as const;
+
+export const getPlaceSectionsMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof placeSections>>, TError,PlaceSectionsMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof placeSections>>, TError,PlaceSectionsMutationVariables, TContext> => {
+
+const mutationKey = getPlaceSectionsMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof placeSections>>, PlaceSectionsMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  placeSections(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PlaceSectionsMutationResult = NonNullable<Awaited<ReturnType<typeof placeSections>>>
+    export type PlaceSectionsMutationBody = PlaceSectionsRequest
+    export type PlaceSectionsMutationError = ErrorResponse
+    export type PlaceSectionsMutationVariables = {data: PlaceSectionsRequest}
+
+    /**
+ * @summary Разложить строки справочника в каталог
+ */
+export const usePlaceSections = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof placeSections>>, TError,PlaceSectionsMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof placeSections>>,
+        TError,
+        PlaceSectionsMutationVariables,
+        TContext
+      > => {
+      return useMutation(getPlaceSectionsMutationOptions(options), queryClient);
     }
 
 export type importPurchasePricesResponse200 = {
@@ -82359,6 +85102,142 @@ export function useGetPortalTemplateLines<TData = Awaited<ReturnType<typeof getP
 
 
 
+export type getPortalTemplateLineOfResponse200 = {
+  data: TemplateLineDto[]
+  status: 200
+}
+
+export type getPortalTemplateLineOfResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getPortalTemplateLineOfResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type getPortalTemplateLineOfResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getPortalTemplateLineOfResponseSuccess = (getPortalTemplateLineOfResponse200) & {
+  headers: Headers;
+};
+export type getPortalTemplateLineOfResponseError = (getPortalTemplateLineOfResponse400 | getPortalTemplateLineOfResponse404 | getPortalTemplateLineOfResponse500) & {
+  headers: Headers;
+};
+
+export type getPortalTemplateLineOfResponse = (getPortalTemplateLineOfResponseSuccess | getPortalTemplateLineOfResponseError)
+
+export const getGetPortalTemplateLineOfUrl = (itemId: string,) => {
+
+
+
+
+  return `/api/portal/templates/line-of/${itemId}`
+}
+
+/**
+ * Опт одежды — только полными линейками (2026-11-15): товар, добавляемый в шаблон поиском, кладётся всей линейкой своего цвета. Ответ — размеры линейки строками шаблона (первая ступень опта в штуках); товар не из линейки — пустой список, его добавляют одной строкой.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Запросить размер куртки, которая продаётся оптом линейками, — все размеры цвета, у каждого `lineKey` и `lineQty`.
+ * 2. Запросить товар не из одежды — пустой список.
+ * @summary Линейка товара для шаблона
+ */
+export const getPortalTemplateLineOf = async (itemId: string, options?: Parameters<typeof apiRequest>[1]): Promise<getPortalTemplateLineOfResponse> => {
+
+  return apiRequest<getPortalTemplateLineOfResponse>(getGetPortalTemplateLineOfUrl(itemId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPortalTemplateLineOfQueryKey = (itemId: string,) => {
+    return [
+    `/api/portal/templates/line-of/${itemId}`
+    ] as const;
+    }
+
+
+export const getGetPortalTemplateLineOfQueryOptions = <TData = Awaited<ReturnType<typeof getPortalTemplateLineOf>>, TError = ErrorResponse>(itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalTemplateLineOf>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPortalTemplateLineOfQueryKey(itemId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPortalTemplateLineOf>>> = ({ signal }) => getPortalTemplateLineOf(itemId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: itemId !== null && itemId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPortalTemplateLineOf>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetPortalTemplateLineOfQueryResult = NonNullable<Awaited<ReturnType<typeof getPortalTemplateLineOf>>>
+export type GetPortalTemplateLineOfQueryError = ErrorResponse
+
+
+export function useGetPortalTemplateLineOf<TData = Awaited<ReturnType<typeof getPortalTemplateLineOf>>, TError = ErrorResponse>(
+ itemId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalTemplateLineOf>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPortalTemplateLineOf>>,
+          TError,
+          Awaited<ReturnType<typeof getPortalTemplateLineOf>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPortalTemplateLineOf<TData = Awaited<ReturnType<typeof getPortalTemplateLineOf>>, TError = ErrorResponse>(
+ itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalTemplateLineOf>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPortalTemplateLineOf>>,
+          TError,
+          Awaited<ReturnType<typeof getPortalTemplateLineOf>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPortalTemplateLineOf<TData = Awaited<ReturnType<typeof getPortalTemplateLineOf>>, TError = ErrorResponse>(
+ itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalTemplateLineOf>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Линейка товара для шаблона
+ */
+
+export function useGetPortalTemplateLineOf<TData = Awaited<ReturnType<typeof getPortalTemplateLineOf>>, TError = ErrorResponse>(
+ itemId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalTemplateLineOf>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetPortalTemplateLineOfQueryOptions(itemId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export type getPortalSuppliersResponse200 = {
   data: PortalSupplierDto[]
   status: 200
@@ -83535,12 +86414,19 @@ export type getPortalPromotionsResponseError = (getPortalPromotionsResponse400 |
 
 export type getPortalPromotionsResponse = (getPortalPromotionsResponseSuccess | getPortalPromotionsResponseError)
 
-export const getGetPortalPromotionsUrl = () => {
+export const getGetPortalPromotionsUrl = (params?: GetPortalPromotionsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/portal/promotions`
+  return stringifiedParams.length > 0 ? `/api/portal/promotions?${stringifiedParams}` : `/api/portal/promotions`
 }
 
 /**
@@ -83552,12 +86438,13 @@ export const getGetPortalPromotionsUrl = () => {
  * 2. Вызвать с заголовком поставщика — `sale` заполнен, товар в `deals`.
  * 3. У покупателя без заявок `firstOrder.status` — `ELIGIBLE`; после первой заявки со скидкой — `USED`.
  * 4. Разнести товары распродажи по двум рубрикам (в одной два, в другой один) — в `saleCategories` сначала рубрика с `count` 2, затем с `count` 1; скрытый товар и товар без рубрики не считаются. Выключить распродажу — список пуст.
- * 5. Негативный 403: заголовок чужого поставщика.
+ * 5. `?mode=WHOLESALE` — акции опта: своя распродажа, свои пороги и своя первая заявка.
+ * 6. Негативный 403: заголовок чужого поставщика.
  * @summary Акции и скидки магазина
  */
-export const getPortalPromotions = async ( options?: Parameters<typeof apiRequest>[1]): Promise<getPortalPromotionsResponse> => {
+export const getPortalPromotions = async (params?: GetPortalPromotionsParams, options?: Parameters<typeof apiRequest>[1]): Promise<getPortalPromotionsResponse> => {
 
-  return apiRequest<getPortalPromotionsResponse>(getGetPortalPromotionsUrl(),
+  return apiRequest<getPortalPromotionsResponse>(getGetPortalPromotionsUrl(params),
   {
     ...options,
     method: 'GET'
@@ -83570,23 +86457,23 @@ export const getPortalPromotions = async ( options?: Parameters<typeof apiReques
 
 
 
-export const getGetPortalPromotionsQueryKey = () => {
+export const getGetPortalPromotionsQueryKey = (params?: GetPortalPromotionsParams,) => {
     return [
-    `/api/portal/promotions`
+    `/api/portal/promotions`, ...(params ? [params] : [])
     ] as const;
     }
 
 
-export const getGetPortalPromotionsQueryOptions = <TData = Awaited<ReturnType<typeof getPortalPromotions>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalPromotions>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+export const getGetPortalPromotionsQueryOptions = <TData = Awaited<ReturnType<typeof getPortalPromotions>>, TError = ErrorResponse>(params?: GetPortalPromotionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalPromotions>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
 
-  const queryKey =  queryOptions?.queryKey ?? getGetPortalPromotionsQueryKey();
+  const queryKey =  queryOptions?.queryKey ?? getGetPortalPromotionsQueryKey(params);
 
 
 
-    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPortalPromotions>>> = ({ signal }) => getPortalPromotions({ signal, ...requestOptions });
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPortalPromotions>>> = ({ signal }) => getPortalPromotions(params, { signal, ...requestOptions });
 
 
 
@@ -83600,7 +86487,7 @@ export type GetPortalPromotionsQueryError = ErrorResponse
 
 
 export function useGetPortalPromotions<TData = Awaited<ReturnType<typeof getPortalPromotions>>, TError = ErrorResponse>(
-  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalPromotions>>, TError, TData>> & Pick<
+ params: undefined |  GetPortalPromotionsParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalPromotions>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof getPortalPromotions>>,
           TError,
@@ -83610,7 +86497,7 @@ export function useGetPortalPromotions<TData = Awaited<ReturnType<typeof getPort
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetPortalPromotions<TData = Awaited<ReturnType<typeof getPortalPromotions>>, TError = ErrorResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalPromotions>>, TError, TData>> & Pick<
+ params?: GetPortalPromotionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalPromotions>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof getPortalPromotions>>,
           TError,
@@ -83620,7 +86507,7 @@ export function useGetPortalPromotions<TData = Awaited<ReturnType<typeof getPort
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 export function useGetPortalPromotions<TData = Awaited<ReturnType<typeof getPortalPromotions>>, TError = ErrorResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalPromotions>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ params?: GetPortalPromotionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalPromotions>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
 /**
@@ -83628,11 +86515,11 @@ export function useGetPortalPromotions<TData = Awaited<ReturnType<typeof getPort
  */
 
 export function useGetPortalPromotions<TData = Awaited<ReturnType<typeof getPortalPromotions>>, TError = ErrorResponse>(
-  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalPromotions>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ params?: GetPortalPromotionsParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalPromotions>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
-  const queryOptions = getGetPortalPromotionsQueryOptions(options)
+  const queryOptions = getGetPortalPromotionsQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
@@ -89555,6 +92442,162 @@ export const useClearPortalCart = <TError = ErrorResponse,
       > => {
       return useMutation(getClearPortalCartMutationOptions(options), queryClient);
     }
+
+export type getPortalCartPartResponse200 = {
+  data: CartDto
+  status: 200
+}
+
+export type getPortalCartPartResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type getPortalCartPartResponse403 = {
+  data: ErrorResponse
+  status: 403
+}
+
+export type getPortalCartPartResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type getPortalCartPartResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type getPortalCartPartResponseSuccess = (getPortalCartPartResponse200) & {
+  headers: Headers;
+};
+export type getPortalCartPartResponseError = (getPortalCartPartResponse400 | getPortalCartPartResponse403 | getPortalCartPartResponse404 | getPortalCartPartResponse500) & {
+  headers: Headers;
+};
+
+export type getPortalCartPartResponse = (getPortalCartPartResponseSuccess | getPortalCartPartResponseError)
+
+export const getGetPortalCartPartUrl = (params?: GetPortalCartPartParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    const explodeParameters = ["itemIds"];
+
+    if (Array.isArray(value) && explodeParameters.includes(key)) {
+      value.forEach((v) => {
+        normalizedParams.append(key, v === null ? 'null' : String(v));
+      });
+      return;
+    }
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/portal/cart/part?${stringifiedParams}` : `/api/portal/cart/part`
+}
+
+/**
+ * Строки заявки вида `mode` (оптовая или розничная), а из них — отмеченные `itemIds`, тем же расчётом, что при отправке: со своей скидкой на заявку и НДС. Так клиент видит скидку до отправки, а не после (просьба владельца 2026-11-14). Пусто — все строки этого вида; без `mode` — все виды. Корзина не меняется.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. В корзине розничная и оптовая строки, у розницы скидка на первую заявку 5%: `?mode=RETAIL` — только розничная строка и `discount.kind=FIRST_ORDER`, а `GET /cart` — без скидки.
+ * 2. Негативный 403: заголовок поставщика, у которого клиента нет.
+ * @summary Корзина одной заявки
+ */
+export const getPortalCartPart = async (params?: GetPortalCartPartParams, options?: Parameters<typeof apiRequest>[1]): Promise<getPortalCartPartResponse> => {
+
+  return apiRequest<getPortalCartPartResponse>(getGetPortalCartPartUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPortalCartPartQueryKey = (params?: GetPortalCartPartParams,) => {
+    return [
+    `/api/portal/cart/part`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPortalCartPartQueryOptions = <TData = Awaited<ReturnType<typeof getPortalCartPart>>, TError = ErrorResponse>(params?: GetPortalCartPartParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalCartPart>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPortalCartPartQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPortalCartPart>>> = ({ signal }) => getPortalCartPart(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPortalCartPart>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetPortalCartPartQueryResult = NonNullable<Awaited<ReturnType<typeof getPortalCartPart>>>
+export type GetPortalCartPartQueryError = ErrorResponse
+
+
+export function useGetPortalCartPart<TData = Awaited<ReturnType<typeof getPortalCartPart>>, TError = ErrorResponse>(
+ params: undefined |  GetPortalCartPartParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalCartPart>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPortalCartPart>>,
+          TError,
+          Awaited<ReturnType<typeof getPortalCartPart>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPortalCartPart<TData = Awaited<ReturnType<typeof getPortalCartPart>>, TError = ErrorResponse>(
+ params?: GetPortalCartPartParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalCartPart>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPortalCartPart>>,
+          TError,
+          Awaited<ReturnType<typeof getPortalCartPart>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useGetPortalCartPart<TData = Awaited<ReturnType<typeof getPortalCartPart>>, TError = ErrorResponse>(
+ params?: GetPortalCartPartParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalCartPart>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Корзина одной заявки
+ */
+
+export function useGetPortalCartPart<TData = Awaited<ReturnType<typeof getPortalCartPart>>, TError = ErrorResponse>(
+ params?: GetPortalCartPartParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPortalCartPart>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetPortalCartPartQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 
 export type getPortalBranchResponse200 = {
   data: PortalBranchDto
@@ -98043,6 +101086,144 @@ export function useDownloadCatalogImportTemplate<TData = Awaited<ReturnType<type
 
 
 
+export type exportCatalogItemsResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type exportCatalogItemsResponse403 = {
+  data: ErrorResponse
+  status: 403
+}
+
+export type exportCatalogItemsResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type exportCatalogItemsResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+;
+export type exportCatalogItemsResponseError = (exportCatalogItemsResponse400 | exportCatalogItemsResponse403 | exportCatalogItemsResponse404 | exportCatalogItemsResponse500) & {
+  headers: Headers;
+};
+
+export type exportCatalogItemsResponse = (exportCatalogItemsResponseError)
+
+export const getExportCatalogItemsUrl = () => {
+
+
+
+
+  return `/api/catalog/import/export`
+}
+
+/**
+ * Все товары продавца, кроме архива, книгой Excel: лист «Каталог», по строке на товар, по разделам и внутри по названию. Столбцы — наименование, цена, единица, артикул, категория, ставка НДС, идентификатор 1С, описание, штрихкод (первый, штучный). Подписи те же, что у шаблона: файл правят и загружают обратно, загрузка узнаёт товары по артикулу или названию.
+ *
+ * Последний столбец «Можно продать» — остаток за вычетом отложенного, пусто у товара без учёта остатка. Загрузка его не читает: она пишет «Остаток» как лежащее на складе, и обратная загрузка съела бы отложенное.
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Войти администратором (`77010000101`), вызвать метод — придёт файл `q-order-my-items.xlsx`.
+ * 2. Открыть его: на листе «Каталог» все товары каталога, архивных нет; в «Можно продать» то же число, что в столбце таблицы каталога.
+ * 3. Поменять цену одного товара, сохранить и отправить файл в предпросмотр загрузки — все столбцы, кроме «Можно продать», распознаны, одна строка «обновится цена».
+ * 4. Негативный 403: тот же запрос под `qo-viewer`.
+ * @summary Скачать мои товары
+ */
+export const exportCatalogItems = async ( options?: Parameters<typeof apiRequest>[1]): Promise<exportCatalogItemsResponse> => {
+
+  return apiRequest<exportCatalogItemsResponse>(getExportCatalogItemsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getExportCatalogItemsQueryKey = () => {
+    return [
+    `/api/catalog/import/export`
+    ] as const;
+    }
+
+
+export const getExportCatalogItemsQueryOptions = <TData = Awaited<ReturnType<typeof exportCatalogItems>>, TError = ErrorResponse>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCatalogItems>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getExportCatalogItemsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof exportCatalogItems>>> = ({ signal }) => exportCatalogItems({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof exportCatalogItems>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ExportCatalogItemsQueryResult = NonNullable<Awaited<ReturnType<typeof exportCatalogItems>>>
+export type ExportCatalogItemsQueryError = ErrorResponse
+
+
+export function useExportCatalogItems<TData = Awaited<ReturnType<typeof exportCatalogItems>>, TError = ErrorResponse>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCatalogItems>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportCatalogItems>>,
+          TError,
+          Awaited<ReturnType<typeof exportCatalogItems>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportCatalogItems<TData = Awaited<ReturnType<typeof exportCatalogItems>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCatalogItems>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof exportCatalogItems>>,
+          TError,
+          Awaited<ReturnType<typeof exportCatalogItems>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useExportCatalogItems<TData = Awaited<ReturnType<typeof exportCatalogItems>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCatalogItems>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Скачать мои товары
+ */
+
+export function useExportCatalogItems<TData = Awaited<ReturnType<typeof exportCatalogItems>>, TError = ErrorResponse>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof exportCatalogItems>>, TError, TData>>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getExportCatalogItemsQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export type getCatalogBoardSummaryResponse200 = {
   data: CatalogBoardSummary
   status: 200
@@ -98248,7 +101429,8 @@ export const getGetCatalogBoardUrl = (params?: GetCatalogBoardParams,) => {
  * 4. `sort=PRICE_DESC` — «Пуховик» первым, «Шапка» (без цены) последней.
  * 5. Завести «Кеды» трижды в одном разделе, у одной не заполнить описание; `group=MODEL&gaps=DESCRIPTION` — одна строка «Кеды», в `model.variants` три варианта, `matched = true` только у варианта без описания.
  * 6. Убрать «Шапку» в архив; `archived=true` — только она, без `archived` — её нет.
- * 7. Негативный: без токена — 401.
+ * 7. Положить «Шапку» в раздел «Аксессуары», «Пуховик» — в «Верхняя одежда» (раздел выше по порядку); `bySection=true&sort=NAME` — «Пуховик» первым.
+ * 8. Негативный: без токена — 401.
  * @summary Позиции простого вида каталога
  */
 export const getCatalogBoard = async (params?: GetCatalogBoardParams, options?: Parameters<typeof apiRequest>[1]): Promise<getCatalogBoardResponse> => {
@@ -105642,6 +108824,115 @@ export const useDeletePortalAccount = <TError = ErrorResponse,
         TContext
       > => {
       return useMutation(getDeletePortalAccountMutationOptions(options), queryClient);
+    }
+
+export type deleteCustomerTaskResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteCustomerTaskResponse400 = {
+  data: ErrorResponse
+  status: 400
+}
+
+export type deleteCustomerTaskResponse404 = {
+  data: ErrorResponse
+  status: 404
+}
+
+export type deleteCustomerTaskResponse500 = {
+  data: ErrorResponse
+  status: 500
+}
+
+export type deleteCustomerTaskResponseSuccess = (deleteCustomerTaskResponse204) & {
+  headers: Headers;
+};
+export type deleteCustomerTaskResponseError = (deleteCustomerTaskResponse400 | deleteCustomerTaskResponse404 | deleteCustomerTaskResponse500) & {
+  headers: Headers;
+};
+
+export type deleteCustomerTaskResponse = (deleteCustomerTaskResponseSuccess | deleteCustomerTaskResponseError)
+
+export const getDeleteCustomerTaskUrl = (id: string,) => {
+
+
+
+
+  return `/api/customer-tasks/${id}`
+}
+
+/**
+ *
+ *
+ * **Как проверить вручную**
+ *
+ * 1. Вызвать — 204, задачи нет ни в карточке клиента, ни в «Мои задачи».
+ * 2. Негативный 404 `CUSTOMER_TASK_NOT_FOUND`: повторный вызов.
+ * @summary Удалить задачу
+ */
+export const deleteCustomerTask = async (id: string, options?: Parameters<typeof apiRequest>[1]): Promise<deleteCustomerTaskResponse> => {
+
+  return apiRequest<deleteCustomerTaskResponse>(getDeleteCustomerTaskUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+
+export const getDeleteCustomerTaskMutationKey = () => ['deleteCustomerTask'] as const;
+
+export const getDeleteCustomerTaskMutationOptions = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCustomerTask>>, TError,DeleteCustomerTaskMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCustomerTask>>, TError,DeleteCustomerTaskMutationVariables, TContext> => {
+
+const mutationKey = getDeleteCustomerTaskMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCustomerTask>>, DeleteCustomerTaskMutationVariables> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteCustomerTask(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCustomerTaskMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCustomerTask>>>
+
+    export type DeleteCustomerTaskMutationError = ErrorResponse
+    export type DeleteCustomerTaskMutationVariables = {id: string}
+
+    /**
+ * @summary Удалить задачу
+ */
+export const useDeleteCustomerTask = <TError = ErrorResponse,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCustomerTask>>, TError,DeleteCustomerTaskMutationVariables, TContext>, request?: SecondParameter<typeof apiRequest>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCustomerTask>>,
+        TError,
+        DeleteCustomerTaskMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteCustomerTaskMutationOptions(options), queryClient);
     }
 
 export type deleteItemMediaResponse204 = {

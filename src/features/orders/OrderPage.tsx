@@ -29,7 +29,6 @@ import {
 import { AskForm, OrderMessages, quoteOf } from './OrderMessages';
 import { RateOrder } from './RateOrder';
 import { ReportProblem } from './ReportProblem';
-import { OrderStateBadge } from './OrderStateBadge';
 import { PickupCode } from './PickupCode';
 import { BACK } from '../shell/SectionHead';
 import { LineAnswers } from './LineAnswers';
@@ -50,8 +49,10 @@ import { PhoneLine } from '../shell/PhoneLine';
 import { MapViewButton } from '../maps/MapViewButton';
 import { pointOf } from '../maps/mapProvider';
 import { useCurrentShop } from '../shell/Shops';
-import { OrderStages } from './OrderStages';
+import { OrderStages, hasStages } from './OrderStages';
 import { kindOf } from './myOrdersModel';
+import { OldPrice, Pill } from './OrderRow';
+import { OrderLineGroup, orderRows } from './OrderLineGroup';
 import { isAboutOrder } from '../shell/messageCounts';
 
 /** Поставщик принял заявку: дальше она только движется к выдаче. */
@@ -204,7 +205,9 @@ export function OrderPage() {
               order.pickup == null ? null : t(order.pickup ? 'orders.way.pickup' : 'orders.way.delivery')]
               .filter(Boolean).join(' · ')}
           </span>
-          <span className="mt-0.5 self-start"><OrderStateBadge state={order.state} /></span>
+          {/* Та же пилюля и то же слово, что в списке: «Продавец проверяет», а не «Отправлена».
+              На телефоне при полосе этапов не нужна — тот же шаг прямо под ней. */}
+          <span className={cn('self-start', hasStages(kindOf(order)) && 'max-lg:hidden')}><Pill kind={kindOf(order)} /></span>
         </span>
       </div>
 
@@ -294,7 +297,8 @@ export function OrderPage() {
           <AskForm key={asking.quote ?? ''} order={order} quote={asking.quote} onDone={() => setAsking(false)} />
         </Card>
       ) : kindOf(order) === 'done' || kindOf(order) === 'cancelled' ? null : (
-        <Button variant="outline" className="self-start" onClick={() => setAsking({})}>
+        // На мониторе то же действие — «Написать продавцу» в колонке справа; вторая кнопка — повтор.
+        <Button variant="outline" className="self-start lg:hidden" onClick={() => setAsking({})}>
           <MessageCircleQuestion aria-hidden="true" className="size-[18px]" />
           {t('orders.ask')}
         </Button>
@@ -302,7 +306,7 @@ export function OrderPage() {
 
       {order.delivery ? (
         <Card className="p-4">
-          <OrderDelivery delivery={order.delivery} />
+          <OrderDelivery delivery={order.delivery} pickup={!!order.pickup} />
         </Card>
       ) : null}
 
@@ -451,7 +455,7 @@ function OrderHelp({ order, phone, onAsk }: { order: PortalOrderDto; phone?: str
           <span className="flex min-w-0 flex-col">
             <b className="text-lead font-extrabold text-ink">{repeat.isPending ? t('orders.collecting') : t('orders.again')}</b>
             <span className="text-caption text-ink-muted">
-              {t('orders.help.lines', { count: order.submitted.length, sum: money(order.total, order.currency) })}
+              {t('orders.help.lines', { count: orderRows(order.submitted).length, sum: money(order.total, order.currency) })}
             </span>
           </span>
         </button>
@@ -489,7 +493,11 @@ function Revision({ title, lines, total, testId, breakdown, currency, diff = [],
       {/* Строкой, а не таблицей (макеты «Кабинет клиента 2.0»): на узком телефоне
           колонки таблицы рвали «2 шт.» и сумму на две строки. */}
       <ul className="flex flex-col divide-y divide-hairline">
-        {lines.map((line, index) => {
+        {orderRows(lines).map((row) => {
+          if (row.kind === 'line') {
+            return <OrderLineGroup key={row.key} rows={row.rows} currency={currency} offered={row.rows.some((one) => changeOf(one))} />;
+          }
+          const { line, index } = row;
           const amount = line.amount ?? (line.price === undefined ? undefined : line.price * line.quantity);
           const change = changeOf(line);
           return (
@@ -514,8 +522,9 @@ function Revision({ title, lines, total, testId, breakdown, currency, diff = [],
                 ) : null}
                 {line.pack ? <PackContents label={t('pack.inPress')} members={packMembers(line.pack)} /> : null}
                 <span className="tabular-nums text-ink-muted">
-                  {line.unit ? quantityWithUnit(line.quantity, line.unit) : decimal(line.quantity)}{packNote(line, t)}
-                  {line.price === undefined ? null : <> × {money(line.price, currency)}</>}
+                  {/* Цена — сразу за упаковками, штуки — в конце: «4 упаковки × 30 000 · 40 шт.», как в панели монитора. */}
+                  {line.unit ? quantityWithUnit(line.quantity, line.unit) : decimal(line.quantity)}
+                  {line.price === undefined ? null : <> × <OldPrice line={line} currency={currency} />{money(line.price, currency)}</>}{packNote(line, t)}
                 </span>
                 <LineStock line={line} stock={stock} />
                 {/* Сейчас нет, но продавец ждёт к дате склада — клиент соглашается ждать или отказывается. */}

@@ -8,6 +8,7 @@ import {
   useGetPortalCart,
   usePutPortalCartWholesaleMinimum,
   useSetPortalCartLine,
+  usePutPortalCartWholesaleLines,
   type CartDto,
 } from '../../api/generated';
 
@@ -90,6 +91,25 @@ export function useWholesaleMinimum() {
       onSuccess: (response) => {
         if (response.status !== 200) return;
         queryClient.setQueryData(getGetPortalCartQueryKey(), response);
+      },
+      onError: reportFailure,
+    },
+  });
+}
+
+/**
+ * Одежда оптом — линейками (решение владельца 2026-11-14): число линеек цвета модели, сервер
+ * раскладывает его по размерам. Ноль убирает линейку. Ответ — пересчитанная корзина.
+ */
+export function useWholesaleLines() {
+  const queryClient = useQueryClient();
+
+  return usePutPortalCartWholesaleLines({
+    mutation: {
+      onSuccess: (response, variables) => {
+        if (response.status !== 200) return;
+        queryClient.setQueryData(getGetPortalCartQueryKey(), response);
+        if (variables.data.lines > 0) reportShareCart();
       },
       onError: reportFailure,
     },

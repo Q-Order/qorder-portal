@@ -1,13 +1,14 @@
+import { useState } from 'react';
 import { stubWideScreen } from '../../test/wideScreen';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { CatalogPage } from './CatalogPage';
-import { HeaderOrderMode } from './OrderModeSwitch';
+import { HeaderOrderMode, useLockOrderMode } from './OrderModeSwitch';
 import { ItemTile } from './CatalogPage';
 import { setOrderMode } from '../cart/orderMode';
 import { ItemThumb } from './ItemThumb';
-import { Route, Routes } from 'react-router-dom';
+import { Route, Routes, useLocation } from 'react-router-dom';
 import { renderScreen } from '../../test/render';
 import { AgeGateDialog } from '../cart/ageGate';
 import { AddedToast } from '../cart/CartPanel';
@@ -189,6 +190,32 @@ describe('витрина кабинета', () => {
     });
     // Шапки на телефоне нет — поле поиска стоит в самом каталоге.
     expect(screen.getByRole('searchbox')).toBeInTheDocument();
+  });
+
+  it('стёртый запрос снимает поиск сразу, крестик в поле — тоже; «Акция» остаётся', async () => {
+    stubWideScreen();
+    const { calls } = stubFetch(catalogRules());
+    renderScreen(<CatalogPage />, { route: '/catalog?q=цемент&sale=1' });
+    const box = await screen.findByRole('searchbox');
+    await waitFor(() => expect(box).toHaveValue('цемент'));
+
+    // Крестик: поле пустое, витрина — без запроса, отбор «Акция» на месте.
+    const before = calls.length;
+    await userEvent.click(screen.getByRole('button', { name: 'Очистить поиск' }));
+    expect(box).toHaveValue('');
+    expect(box).toHaveFocus();
+    expect(screen.queryByRole('button', { name: 'Очистить поиск' })).not.toBeInTheDocument();
+    await waitFor(() => expect(calls.slice(before).some((call) => call.url.includes('/api/portal/catalog?')
+      && call.url.includes('promo=true') && !call.url.includes('query='))).toBe(true));
+
+    // Набрать и стереть руками — то же самое, без Enter.
+    await userEvent.type(box, 'песок{Enter}');
+    await waitFor(() => expect(calls.some((call) => call.url.includes('query=%D0%BF%D0%B5%D1%81%D0%BE%D0%BA'))).toBe(true));
+    const typed = calls.length;
+    await userEvent.clear(box);
+    expect(box).toHaveValue('');
+    await waitFor(() => expect(calls.slice(typed).some((call) => call.url.includes('/api/portal/catalog?')
+      && !call.url.includes('query='))).toBe(true));
   });
 
   it('позиция вне корзины предлагает кнопку, а не поле количества', async () => {
@@ -815,8 +842,38 @@ describe('витрина по макету: порядок, числа, метк
     await userEvent.click(within(group).getByRole('radio', { name: /Оптом/ }));
     await waitFor(() => expect(calls.some((call) => call.url.includes('/api/portal/catalog?') && call.url.includes('channel=ANY_WHOLESALE'))).toBe(true));
     expect(within(group).getByRole('radio', { name: /Оптом/ })).toHaveAttribute('aria-checked', 'true');
+    // Фильтры — тем же способом: в «Оптом» нет поля, которого нет у оптовых товаров.
+    await waitFor(() => expect(calls.some((call) => call.url.includes('/catalog/filters?') && call.url.includes('channel=ANY_WHOLESALE'))).toBe(true));
   });
 
+
+  it('открыта карточка товара только в розницу — «Оптом» в шапке недоступно, выбор каталога не трогается', async () => {
+    stubWideScreen();
+    stubFetch([
+      get('presence=ALL', { ...COUNTS, retail: 12, wholesale: 6, both: 2 }),
+      get('/catalog/counts?channel=ANY_WHOLESALE&presence=IN_STOCK', { ...COUNTS, all: 6 }),
+      get('/catalog/counts?channel=ANY_RETAIL&presence=IN_STOCK', { ...COUNTS, all: 12 }),
+    ]);
+    setOrderMode('supplier-1', 'WHOLESALE');
+    function RetailCard() {
+      const [open, setOpen] = useState(true);
+      return open ? <><LockRetail /><button type="button" onClick={() => setOpen(false)}>Назад в каталог</button></> : null;
+    }
+    function LockRetail() {
+      useLockOrderMode('RETAIL');
+      return null;
+    }
+    renderScreen(<><HeaderOrderMode /><RetailCard /></>);
+    const group = await screen.findByRole('radiogroup', { name: 'Как заказываете: оптом или в розницу' });
+    expect(within(group).getByRole('radio', { name: /В розницу/ })).toHaveAttribute('aria-checked', 'true');
+    expect(within(group).getByRole('radio', { name: /Оптом/ })).toBeDisabled();
+
+    // Ушли из карточки — снова выбор каталога, оба способа доступны.
+    await userEvent.click(screen.getByRole('button', { name: 'Назад в каталог' }));
+    expect(within(group).getByRole('radio', { name: /Оптом/ })).toHaveAttribute('aria-checked', 'true');
+    expect(within(group).getByRole('radio', { name: /Оптом/ })).toBeEnabled();
+    setOrderMode('supplier-1', 'RETAIL');
+  });
 
   it('продавец продаёт только оптом — вместо переключателя плашка «Только оптом»', async () => {
     stubWideScreen();
@@ -976,6 +1033,35 @@ describe('витрина по макету: порядок, числа, метк
     expect(JSON.parse(String(put.init?.body))).toEqual({ quantity: 100 });
   });
 
+  /** Одежда оптом (2026-11-14): на плитке цена за штуку, мелко — цена линейки; в корзину — линейкой размеров. */
+  it('одежда «только опт» — цена за штуку, а в корзину кладётся линейка', async () => {
+    const jacket = {
+      ...CEMENT, id: 'item-7', name: 'Пиджак', unit: 'линейка', price: 70000,
+      terms: { hit: false, novelty: false, ageRestricted: false, minQuantity: 1, quantityStep: 1 },
+      wholesale: { unit: 'линейка', packQty: 4, pieceUnit: 'шт', retail: false, tiers: [{ from: 1, price: 70000 }],
+        linePieces: 4, piecePrice: 17500 },
+    };
+    const { calls } = stubFetch([
+      method('PUT', '/api/portal/cart/wholesale-lines/item-7', emptyCart),
+      ...catalogRules([jacket]),
+    ]);
+    renderScreen(<CatalogPage />);
+
+    const tile = await screen.findByTestId('item-tile');
+    expect(within(tile).getByText(/17\s?500/)).toBeInTheDocument();
+    // Строка линейки вернулась на плитку одежды (просьба владельца 2026-11-15).
+    expect(within(tile).getByTestId('line-note')).toHaveTextContent(/Линейка 4 шт — 70\s?000/);
+    expect(within(tile).queryByTestId('wholesale-note')).not.toBeInTheDocument();
+    await userEvent.click(within(tile).getByRole('button', { name: /В корзину/ }));
+    const put = await waitFor(() => {
+      const found = calls.find((call) => call.init?.method === 'PUT');
+      expect(found).toBeDefined();
+      return found!;
+    });
+    expect(String(put.url)).toContain('/api/portal/cart/wholesale-lines/item-7');
+    expect(JSON.parse(String(put.init?.body))).toEqual({ lines: 1 });
+  });
+
   it('метки продавца видны на карточке, а минимум — на кнопке и в запросе', async () => {
     const wine = {
       ...CEMENT,
@@ -992,7 +1078,8 @@ describe('витрина по макету: порядок, числа, метк
     expect(within(tile).getByText('−10%')).toBeInTheDocument();
     // Канал продажи — на каждой плитке: у цемента опта нет.
     expect(within(tile).getByTestId('sale-channel')).toHaveTextContent('В розницу');
-    expect(screen.getByText('Заказ от 10 мешков')).toBeInTheDocument();
+    // Минимум в каталоге не пишется строкой (2026-11-15) — он на кнопке.
+    expect(screen.queryByText('Заказ от 10 мешков')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'В корзину — 10 мешков' }));
     const put = await waitFor(() => {
@@ -1025,6 +1112,27 @@ describe('витрина по макету: порядок, числа, метк
     await userEvent.click(within(dialog).getByRole('button', { name: 'Да, мне есть 21 год' }));
     await waitFor(() => expect(calls.some((call) => call.init?.method === 'PUT')).toBe(true));
     expect(calls.some((call) => call.url.includes('age-confirmation'))).toBe(true);
+  });
+
+  it('товар 18+: значок «18+», вопрос «Вам уже есть 18 лет?», подтверждается именно 18', async () => {
+    const energy = {
+      ...CEMENT, id: 'item-8', name: 'Энергетик', unit: 'шт',
+      terms: { hit: false, novelty: false, ageRestricted: true, minAge: 18 },
+    };
+    const { calls } = stubFetch(withCounts([
+      method('POST', '/api/portal/cart/age-confirmation', { ...emptyCart, ageConfirmed: true, confirmedAge: 18 }),
+      ...cartServer(cartWith('item-8', 1)),
+      ...catalogRules([energy]),
+    ]));
+
+    renderScreen(<><CatalogPage /><AgeGateDialog /></>);
+
+    expect(await screen.findByText('18+')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'В корзину' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Вам уже есть 18 лет?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Да, мне есть 18 лет' }));
+    await waitFor(() => expect(calls.some((call) => call.init?.method === 'PUT')).toBe(true));
+    expect(calls.some((call) => call.url.includes('age-confirmation') && call.url.includes('age=18'))).toBe(true);
   });
 
   it('положенное называется уведомлением с кнопкой «Открыть корзину»', async () => {
@@ -1154,6 +1262,16 @@ describe('выбор варианта на карточке витрины', () 
     colorCount: 2,
     variants: MUG_VARIANTS,
   };
+  // Одноцветная модель с размерами: выбор на плитке — размер, плитка переключается на месте.
+  const size = (value: string) => [{ code: 'SIZE', name: 'Размер', type: 'TEXT', value }];
+  const CAP_VARIANTS = [
+    { itemId: 'cap-s', price: 1500, stock: 'IN_STOCK', fields: size('S') },
+    { itemId: 'cap-m', price: 1700, stock: 'IN_STOCK', fields: size('M') },
+  ];
+  const CAP = { ...MUG, id: 'cap-s', name: 'Кепка', colorCount: undefined, variants: CAP_VARIANTS };
+  function Where() {
+    return <output data-testid="where">{useLocation().pathname}</output>;
+  }
 
   it('у товара с двумя цветами на карточке группа «Цвет», а у товара без вариантов её нет', async () => {
     stubFetch(catalogRules([MUG, CEMENT]));
@@ -1170,31 +1288,44 @@ describe('выбор варианта на карточке витрины', () 
     expect(within(cement).queryByRole('radiogroup')).not.toBeInTheDocument();
   });
 
-  it('выбор второго цвета меняет цену и ссылку на карточке, не уводя с витрины', async () => {
+  // Каждый цвет — своя плитка (2026-11-15): кружок другого цвета открывает его карточку, плитка не меняется.
+  it('кружок другого цвета открывает карточку этого цвета; цвет плитки — в названии', async () => {
     stubFetch(catalogRules([MUG]));
+    renderScreen(<><CatalogPage /><Where /></>);
+
+    const tile = await screen.findByTestId('item-tile');
+    expect(within(tile).getByRole('link', { name: 'Кружка · белый' })).toHaveAttribute('href', '/catalog/mug-white');
+    await userEvent.click(within(tile).getByRole('radio', { name: 'Цвет: чёрный' }));
+
+    expect(screen.getByTestId('where')).toHaveTextContent('/catalog/mug-black');
+    expect(tile).toHaveTextContent(/1\s500 ₸/);
+  });
+
+  it('выбор размера меняет цену и ссылку на карточке, не уводя с витрины', async () => {
+    stubFetch(catalogRules([CAP]));
     renderScreen(<CatalogPage />);
 
     const tile = await screen.findByTestId('item-tile');
     expect(tile).toHaveTextContent(/1\s500 ₸/);
-    await userEvent.click(within(tile).getByRole('radio', { name: 'Цвет: чёрный' }));
+    await userEvent.click(within(tile).getByRole('radio', { name: 'Размер: M' }));
 
-    expect(within(tile).getByRole('radio', { name: 'Цвет: чёрный' })).toHaveAttribute('aria-checked', 'true');
+    expect(within(tile).getByRole('radio', { name: 'Размер: M' })).toHaveAttribute('aria-checked', 'true');
     expect(tile).toHaveTextContent(/1\s700 ₸/);
     expect(tile).not.toHaveTextContent(/1\s500 ₸/);
-    expect(within(tile).getByRole('link', { name: 'Кружка' })).toHaveAttribute('href', '/catalog/mug-black');
+    expect(within(tile).getByRole('link', { name: 'Кепка' })).toHaveAttribute('href', '/catalog/cap-m');
   });
 
   it('у выбранного варианта со скидкой — его метка «−N%» и зачёркнутая старая цена', async () => {
     const variants = [
-      MUG_VARIANTS[0],
-      { ...MUG_VARIANTS[1], price: 1700, oldPrice: 2000, discountPercent: 15 },
+      CAP_VARIANTS[0],
+      { ...CAP_VARIANTS[1], price: 1700, oldPrice: 2000, discountPercent: 15 },
     ];
-    stubFetch(catalogRules([{ ...MUG, variants }]));
+    stubFetch(catalogRules([{ ...CAP, variants }]));
     renderScreen(<CatalogPage />);
 
     const tile = await screen.findByTestId('item-tile');
     expect(tile).not.toHaveTextContent('−15%');
-    await userEvent.click(within(tile).getByRole('radio', { name: 'Цвет: чёрный' }));
+    await userEvent.click(within(tile).getByRole('radio', { name: 'Размер: M' }));
 
     expect(tile).toHaveTextContent('−15%');
     const old = tile.querySelector('s');
@@ -1202,12 +1333,13 @@ describe('выбор варианта на карточке витрины', () 
     expect(old!.textContent).toMatch(/2\s000 ₸/);
 
     // Обратно на вариант без скидки — метки и старой цены нет.
-    await userEvent.click(within(tile).getByRole('radio', { name: 'Цвет: белый' }));
+    await userEvent.click(within(tile).getByRole('radio', { name: 'Размер: S' }));
     expect(tile).not.toHaveTextContent('−15%');
     expect(tile.querySelector('s')).toBeNull();
   });
 
-  it('у выбранного варианта — его свободный остаток «Свободно: N», ноль — серым', async () => {
+  /** Числа «Свободно: N» в каталоге нет (2026-11-15) — оно в карточке товара. */
+  it('в каталоге остаток числом не пишется', async () => {
     const variants = [
       { ...MUG_VARIANTS[0], available: 12 },
       { ...MUG_VARIANTS[1], available: 0 },
@@ -1216,12 +1348,9 @@ describe('выбор варианта на карточке витрины', () 
     renderScreen(<CatalogPage />);
 
     const tile = await screen.findByTestId('item-tile');
-    expect(within(tile).getByText('Свободно: 12')).toHaveClass('text-in-stock');
+    expect(within(tile).queryByText(/Свободно/)).not.toBeInTheDocument();
     await userEvent.click(within(tile).getByRole('radio', { name: 'Цвет: чёрный' }));
-
-    const zero = within(tile).getByText('Свободно: 0');
-    expect(zero).toHaveClass('text-ink-subtle');
-    expect(within(tile).queryByText('Свободно: 12')).not.toBeInTheDocument();
+    expect(within(tile).queryByText(/Свободно/)).not.toBeInTheDocument();
   });
 
   it('у варианта без учёта остатка строки «Свободно» нет', async () => {
@@ -1239,14 +1368,14 @@ describe('выбор варианта на карточке витрины', () 
 
   it('«В корзину» после выбора кладёт позицию выбранного варианта', async () => {
     const { calls } = stubFetch([
-      ...cartServer(cartWith('mug-black', 1)),
+      ...cartServer(cartWith('cap-m', 1)),
       get('/api/portal/categories', []),
-      get('/api/portal/catalog', { page: 0, size: 50, totalElements: 1, items: [MUG] }),
+      get('/api/portal/catalog', { page: 0, size: 50, totalElements: 1, items: [CAP] }),
     ]);
     renderScreen(<CatalogPage />);
 
     const tile = await screen.findByTestId('item-tile');
-    await userEvent.click(within(tile).getByRole('radio', { name: 'Цвет: чёрный' }));
+    await userEvent.click(within(tile).getByRole('radio', { name: 'Размер: M' }));
     await userEvent.click(within(tile).getByRole('button', { name: 'В корзину' }));
 
     const put = await waitFor(() => {
@@ -1254,7 +1383,7 @@ describe('выбор варианта на карточке витрины', () 
       expect(found).toBeDefined();
       return found!;
     }, { timeout: 3000 });
-    expect(put.url).toContain('/api/portal/cart/lines/mug-black');
+    expect(put.url).toContain('/api/portal/cart/lines/cap-m');
     // Взятый вариант дальше набирается счётчиком на той же карточке.
     expect(await within(tile).findByLabelText(/^Количество, /)).toHaveValue(1);
   });

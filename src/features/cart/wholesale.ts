@@ -26,15 +26,12 @@ export function tierFor<T extends { from: number }>(tiers: T[], packs: number): 
 
 /**
  * Разбиение штук до корзины — то же правило, что у сервера (`WholesaleSplit`):
- * целые упаковки по ступени, не дотянули до первой или упаковка за штуку
- * дороже розницы — всё в розницу.
+ * целые упаковки по ступени, не дотянули до первой — всё в розницу. Упаковки идут по ступени,
+ * даже когда розница со своей распродажей дешевле (решение владельца 2026-11-13).
  */
-export function splitOf(wholesale: ShowcaseWholesaleDto, pieces: number, retailPrice?: number) {
+export function splitOf(wholesale: ShowcaseWholesaleDto, pieces: number) {
   const whole = Math.floor(pieces / wholesale.packQty);
-  const reached = tierFor(wholesale.tiers, whole);
-  // Упаковка дороже розницы за штуку (распродажа без скидки на опт) — клиент берёт всё в розницу.
-  const tier = reached && (retailPrice === undefined || reached.price <= retailPrice * wholesale.packQty)
-    ? reached : undefined;
+  const tier = tierFor(wholesale.tiers, whole);
   const packs = tier ? whole : 0;
   return { packs, tier, rest: pieces - packs * wholesale.packQty };
 }

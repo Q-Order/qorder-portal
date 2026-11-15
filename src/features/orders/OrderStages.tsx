@@ -14,6 +14,9 @@ import type { OrderKind } from './myOrdersModel';
  */
 const CURRENT: Partial<Record<OrderKind, number>> = { review: 1, answer: 1, accepted: 2, ready: 3 };
 
+/** Есть ли у заявки этого вида полоса этапов (у отменённой, полученной и т. п. — нет). */
+export const hasStages = (kind: OrderKind) => CURRENT[kind] !== undefined;
+
 export function OrderStages({ kind, delivery }: { kind: OrderKind; delivery: boolean }) {
   const { t } = useTranslation();
   const current = CURRENT[kind];

@@ -112,6 +112,19 @@ describe('строки корзины', () => {
     expect(row).toHaveTextContent(/Цена изменилась: было 31\s990 ₸, стало 30\s591 ₸/);
   });
 
+  it('у размера с новой ценой остаётся цвет и размер — у размеров одной модели одно название', async () => {
+    const changed = {
+      ...line('item-1', 'Куртка AZA01', 'шт'), quantity: 1, variantLabel: 'Чёрный · 52', mode: 'RETAIL',
+      priceAtAdding: 12000, price: 13000, priceChanged: true, total: 13000,
+    };
+    stubFetch([get('/api/portal/cart', { ...cart, lines: [changed] })]);
+    renderScreen(<CartLines />);
+
+    const [row] = await screen.findAllByTestId('cart-line');
+    expect(row).toHaveTextContent('Чёрный · 52');
+    expect(row).toHaveTextContent(/Цена изменилась: было 12\s000 ₸, стало 13\s000 ₸/);
+  });
+
   /**
    * Варианты — отдельные позиции с одним названием: две строки разных
    * цветов без подписи читались бы одной позицией, положенной дважды.

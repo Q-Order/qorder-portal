@@ -44,7 +44,8 @@ describe('цена в плитке шаблона', () => {
       />,
     );
 
-    expect(screen.getByTestId('wholesale-note')).toHaveTextContent(/Оптом: от 1\s700 ₸ за упаковку \(20 мешков\)/);
+    // Строки «Оптом: …» в каталоге нет (2026-11-15): цены опта — в карточке.
+    expect(screen.queryByTestId('wholesale-note')).not.toBeInTheDocument();
     expect(screen.getByText('в розницу за мешок')).toBeInTheDocument();
   });
 
@@ -59,11 +60,10 @@ describe('цена в плитке шаблона', () => {
       />,
     );
 
-    expect(screen.getByTestId('wholesale-note')).toHaveTextContent(/Оптом: 24\s000 ₸ за шт\. от 20 шт\./);
-    expect(screen.getByTestId('wholesale-note')).not.toHaveTextContent(/\(/);
+    expect(screen.queryByTestId('wholesale-note')).not.toBeInTheDocument();
   });
 
-  it('товар «только опт» — вложение в скобках рядом с ценой упаковки', () => {
+  it('товар «только опт» — цена без «за упаковку» и вложения', () => {
     renderScreen(
       <TemplatePrice
         item={{
@@ -75,10 +75,10 @@ describe('цена в плитке шаблона', () => {
       />,
     );
 
-    expect(screen.getByTestId('wholesale-note')).toHaveTextContent('(20 мешков)');
-    // Цена упаковки — цветом опта, как и строка опта: её не должны принять за розничную.
-    expect(screen.getByText(/1\s800/)).toHaveClass('text-wholesale');
-    expect(screen.getByTestId('wholesale-note')).toHaveClass('text-wholesale');
+    // В каталоге у «только опт» — одна цена: без «за упаковку» и вложения (2026-11-15).
+    expect(screen.queryByTestId('wholesale-note')).not.toBeInTheDocument();
+    expect(screen.queryByText(/за упаковку|20 мешков/)).not.toBeInTheDocument();
+    expect(screen.getByText(/1\s800/)).toHaveClass('text-ok-ink');
   });
 
   it('у штучного товара подписи опта нет', () => {

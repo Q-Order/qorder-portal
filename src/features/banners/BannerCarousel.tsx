@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, Pause, Play } from '../../ui/icons';
-import { useGetPortalBanners, useGetPortalPromotions, useGetPortalSuppliers, type PortalPromoSale, type ShowcaseBannerDto } from '../../api/generated';
+import { useGetPortalBanners, useGetPortalSuppliers, type PortalPromoSale, type ShowcaseBannerDto } from '../../api/generated';
 import type { TFunction } from 'i18next';
 import { shortDate } from '../../shared/format';
 import { useSupplier } from '../../supplier/useSupplier';
@@ -13,6 +13,7 @@ import { useMotion } from '../../ui/motion/motionLevel';
 import { useColumnWidth } from '../../ui/useColumnWidth';
 import { skinOf } from './bannerSkins';
 import { BannerSlide } from './BannerSlide';
+import { usePromotions } from '../promotions/usePromotions';
 
 /** Сколько слайд стоит на витрине — столько же обещает продавцу редактор. */
 const SLIDE_MS = 7000;
@@ -72,7 +73,7 @@ export function BannerCarousel({ width, category, onAction, onSale }: {
 }) {
   const { t } = useTranslation();
   const banners = useGetPortalBanners();
-  const promotions = useGetPortalPromotions();
+  const promotions = usePromotions();
   const dealCount = promotions.data?.status === 200 ? promotions.data.data.dealCount : undefined;
   const slides = bannersFor(liveBanners(banners.data?.status === 200 ? banners.data.data : [], dealCount), category);
 

@@ -2,6 +2,7 @@ import { useCartPart } from './cartPart';
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
+  getGetMyPortalOrdersQueryKey,
   getGetPortalCartQueryKey,
   getGetPortalSuppliersQueryKey,
   useSubmitPortalOrder,
@@ -55,6 +56,9 @@ export function useCheckout(initialDelivery?: SubmitOrderDelivery) {
   const credit = askCredit ? chosenCredit : false;
   const [delivery, setDelivery] = useState<SubmitOrderDelivery>(initialDelivery ?? {});
   const [submitted, setSubmitted] = useState<string | null>(null);
+  // Вид ушедшей заявки — запоминается при отправке: после неё корзина из одних строк другого вида
+  // «становится» той заявкой, и вторую к оформлению искали бы не там.
+  const [sentPart, setSentPart] = useState(part);
   const [stale, setStale] = useState<CartStaleResponse | null>(null);
   // Поставщик приостановлен платформой: заявку не примут, корзина остаётся.
   const [closed, setClosed] = useState(false);
@@ -79,9 +83,12 @@ export function useCheckout(initialDelivery?: SubmitOrderDelivery) {
         setStale(null);
         setClosed(false);
         setSubmitted((response.data as PortalDraftCreated).draftId);
+        setSentPart(part);
         // Оставшееся в корзине — снова отмечено: следующая заявка начинается со всего, что лежит.
         pick.set([]);
         void queryClient.invalidateQueries({ queryKey: getGetPortalCartQueryKey() });
+        // Список заявок — тоже: «Как сделать первый заказ» отмечает шаги по нему (2026-11-15).
+        void queryClient.invalidateQueries({ queryKey: getGetMyPortalOrdersQueryKey() });
       },
       onError: (error) => {
         const info = (error as { info?: CartStaleResponse }).info;
@@ -159,6 +166,8 @@ export function useCheckout(initialDelivery?: SubmitOrderDelivery) {
     /** После отправки одной заявки — к оформлению второй, что осталась в корзине. */
     again: () => { setSubmitted(null); setNote(''); setCredit(null); },
     submitted,
+    /** Вид заявки, которая только что ушла. */
+    sentPart,
     stale,
     closed,
     failed,

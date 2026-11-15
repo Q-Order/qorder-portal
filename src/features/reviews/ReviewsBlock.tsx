@@ -14,6 +14,7 @@ import { intlLocale } from '../../i18n';
 import { dayMonth, shortDate } from '../../shared/format';
 import { cn } from '../../ui/cn';
 import { prefersReducedMotion } from '../../ui/reducedMotion';
+import { LoadFailed } from '../../ui/LoadFailed';
 import { ReviewForm } from './ReviewForm';
 import { ReviewPhotoStrip } from './ReviewPhotos';
 import { Star, Stars } from './Stars';
@@ -59,6 +60,7 @@ export function ReviewsBlock({
   const section = useRef<HTMLElement>(null);
   const { hash } = useLocation();
   const loaded = !reviews.isPending;
+  const failed = loaded && reviews.data?.status !== 200;
 
   // Пришли по ссылке «Оценить товар» (`#reviews`): браузер сам к якорю не
   // прокрутит — блока ещё не было в разметке, — поэтому прокручиваем, когда
@@ -111,15 +113,19 @@ export function ReviewsBlock({
         </p>
       </div>
 
+      {/* Сбой сервера — так и сказать: пустая сводка «Пока нет оценок» спорила
+          с «4,7 · 3 отзыва» в шапке карточки. */}
+      {failed ? <LoadFailed onRetry={() => void reviews.refetch()} /> : (
       <div className="grid gap-5 lg:grid-cols-[400px_minmax(0,1fr)] lg:items-start lg:gap-6">
         <div className="flex flex-col gap-4">
           <div data-testid="reviews-summary" className="flex flex-col gap-[18px] rounded-[calc(var(--radius-card)*13/11)] bg-surface p-6 shadow-[0_0_0_1px_var(--color-hairline)]">
             <div className="flex items-center gap-[18px]">
-              <span className="text-5xl font-black leading-none tabular-nums tracking-[-0.04em] text-ink lg:text-[4.25rem]">
-                {published.length
-                  ? average.toLocaleString(intlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-                  : '—'}
-              </span>
+              {/* Без оценок числа нет вовсе: крупный прочерк читался поломкой, «Пока нет оценок» сказано рядом. */}
+              {published.length ? (
+                <span className="text-5xl font-black leading-none tabular-nums tracking-[-0.04em] text-ink lg:text-[4.25rem]">
+                  {average.toLocaleString(intlLocale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                </span>
+              ) : null}
               <span className="flex flex-col gap-1.5">
                 {/* Без отзывов «Оценка 0 из 5» читалась бы плохой оценкой, а не её отсутствием. */}
                 <Stars value={average} size="size-6" label={published.length ? undefined : t('reviews.v2.noRatings')} />
@@ -277,6 +283,7 @@ export function ReviewsBlock({
           )}
         </div>
       </div>
+      )}
     </section>
   );
 }

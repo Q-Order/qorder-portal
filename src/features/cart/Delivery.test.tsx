@@ -133,6 +133,23 @@ describe('доставка при оформлении', () => {
     expect(field).toHaveValue('ул. Абая, 1');
   });
 
+  it('«только самовывоз» — в расчёте строка «Самовывоз», а не «Доставка — по договорённости»', async () => {
+    stubFetch([
+      get('/api/portal/cart', cart),
+      get('/api/portal/delivery', { mode: 'PICKUP_ONLY', methods: [], pickupPoints: [] }),
+    ]);
+
+    renderScreen(<CheckoutPage />);
+
+    const row = await screen.findByTestId('delivery-total');
+    await waitFor(() => expect(row).toHaveTextContent('бесплатно'));
+    expect(row.parentElement).toHaveTextContent(/^Самовывоз/);
+    expect(row).not.toHaveTextContent(/по договорённости/i);
+    // «Что будет дальше» — о самовывозе, без «или привезут».
+    expect(screen.getByText('Когда заявка готова — заберёте её сами.')).toBeInTheDocument();
+    expect(screen.queryByText(/Стоимость доставки поставщик добавит/)).not.toBeInTheDocument();
+  });
+
   it('стоимость способа входит в итог и уходит в заявку', async () => {
     const { calls } = stubFetch([
       get('/api/portal/cart', cart),

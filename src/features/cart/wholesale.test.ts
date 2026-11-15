@@ -14,9 +14,9 @@ describe('опт до корзины', () => {
     expect(splitOf(CEMENT, 200)).toMatchObject({ packs: 10, rest: 0, tier: { price: 1700 } });
   });
 
-  it('упаковка дороже розницы за штуку — всё в розницу', () => {
-    expect(splitOf(CEMENT, 45, 89)).toMatchObject({ packs: 0, rest: 45 });
-    expect(splitOf(CEMENT, 45, 90)).toMatchObject({ packs: 2, rest: 5 });
+  it('упаковки по ступени, даже если розница за штуку дешевле', () => {
+    // 1800 за упаковку из 20 — 90 за штуку; розница по распродаже 50 не отменяет опт.
+    expect(splitOf(CEMENT, 45)).toMatchObject({ packs: 2, rest: 5, tier: { price: 1800 } });
   });
 
   it('«только опт» считает упаковки и кладёт штуки', () => {

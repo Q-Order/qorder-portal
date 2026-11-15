@@ -37,6 +37,12 @@ describe('итог заявки с грузчиками', () => {
     expect(screen.getByTestId('order-grand-total')).toHaveTextContent(/^14\s000\s₸$/);
   });
 
+  it('самовывоз — «Самовывоз — бесплатно», а не «Доставка 0 ₸»', () => {
+    render(<OrderTotals currency="KZT" total={22800} breakdown={{ goodsTotal: 24000, deliveryPrice: 0, pickup: true }} />);
+
+    expect(screen.getByTestId('order-delivery')).toHaveTextContent(/^Самовывоз\s*бесплатно$/);
+  });
+
   it('без грузчиков строки нет', () => {
     render(<OrderTotals currency="KZT" total={14000} breakdown={{ goodsTotal: 12500, deliveryPrice: 1500 }} />);
 

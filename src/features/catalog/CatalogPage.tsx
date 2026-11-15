@@ -1,5 +1,4 @@
 import { takenIn } from '../cart/cartPart';
-import { WholesaleNote } from './tiles/TemplatePrice';
 import { LoadFailed } from '../../ui/LoadFailed';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -11,7 +10,6 @@ import {
   useGetPortalCatalogFilters,
   useGetPortalCatalogCounts,
   useGetPortalCategories,
-  useGetPortalPromotions,
   type GetPortalCatalogPresence,
   type GetPortalCatalogSort,
   type ShowcaseBannerDto,
@@ -41,13 +39,14 @@ import { Skeleton } from '../../ui/Skeleton';
 import { cn } from '../../ui/cn';
 import { useColumnWidth } from '../../ui/useColumnWidth';
 import { useWideScreen } from '../../ui/useWideScreen';
-import { CartAction, DealPrice, ItemBadges, ItemFacts, MARK_LOOK, dealOf, inMode, MarkIcon, RatingBadge, packPriceClass, perUnitNote, priceNote, useOpenCard } from './itemParts';
+import { CartAction, DealPrice, ItemBadges, ItemFacts, MARK_LOOK, dealOf, inMode, MarkIcon, RatingBadge, packPriceClass, perPiece, perUnitNote, priceNote, useOpenCard } from './itemParts';
 import { useOrderMode } from '../cart/orderMode';
 import { isCounts, useShopChannel } from './OrderModeSwitch';
 import { ChosenChips, PhoneFilters, RubricPicture, SortButton, SortMenu } from './PhoneFilters';
 import { HOME } from '../../ui/sectionBack';
 import { SearchField } from '../shell/layouts/headerParts';
 import { PageHelp } from '../shell/HelpGuide';
+import { usePromotions } from '../promotions/usePromotions';
 
 // Метки и условия продажи живут в `itemParts`; карточка товара берёт их отсюда.
 export { ItemBadges, ItemFacts };
@@ -158,7 +157,7 @@ export function CatalogPage() {
     }
     noveltyWasInAddress.current = noveltyInAddress;
   }, [noveltyInAddress]);
-  const promotions = useGetPortalPromotions();
+  const promotions = usePromotions();
   const dealCount = promotions.data?.status === 200 ? promotions.data.data.dealCount : 0;
   // «Сначала со скидкой» — только пока распродажа идёт: без неё порядок
   // ничем не отличался бы от «сначала популярных».
@@ -227,7 +226,8 @@ export function CatalogPage() {
   });
   // В «Всех товарах» — поля всего каталога и «Размер» из рубрик одежды (решение владельца 2026-10-30).
   // Числа у вариантов — с тем же наличием, что у списка; прежние держатся, пока идут новые, чтобы ряд не мигал.
-  const filtersQuery = useGetPortalCatalogFilters({ categoryId, presence },
+  // И тем же способом продажи: в «Оптом» нет поля, которого нет у оптовых товаров (просьба владельца 2026-11-14).
+  const filtersQuery = useGetPortalCatalogFilters({ categoryId, presence, channel },
     { query: { placeholderData: keepPreviousData } });
   const facets = filtersQuery.data?.status === 200
     && Array.isArray(filtersQuery.data.data) ? filtersQuery.data.data : [];
@@ -705,10 +705,21 @@ export function ItemTile({
   const { t } = useTranslation();
   const currency = useSupplierCurrency();
   // Выбранный на плитке вариант — её цена, наличие, корзина и карточка.
-  const { shown, choice, colour } = useTileVariant(item);
+  const { shown, choice, colour, colourName } = useTileVariant(item);
+  // Цвет — своей плиткой (2026-11-15): «Поло мужское Club · Красный», иначе четыре плитки звались одинаково.
+  const title = colourName ? `${item.name} · ${colourName}` : item.name;
   // Сведения выбранной заявки: в «Оптом» — опт, в «В розницу» — розница. В корзину кладётся `shown`.
   const [orderMode] = useOrderMode();
   const view = inMode(shown, orderMode);
+  // Пресс — цена за штуку крупно, цена пресса строкой ниже (2026-11-14); метки и условия — по `view`.
+  // Одежда оптом: крупно цена штуки, мелко «Линейка 6 шт — 60 000 ₸» (описание линеек 2026-11-14, просьба владельца 2026-11-15).
+  const lineWholesale = view.wholesale?.linePieces && !view.wholesale.retail ? view.wholesale : undefined;
+  const lineNote = lineWholesale?.tiers[0] ? (
+    <span data-testid="line-note" className="text-xs font-semibold text-ink-muted">
+      {t('item.line.price', { pieces: lineWholesale.linePieces, price: money(lineWholesale.tiers[0].price, currency) })}
+    </span>
+  ) : null;
+  const priced = perPiece(view);
   const openCard = useOpenCard(shown.id);
 
   if (phone) {
@@ -738,42 +749,58 @@ export function ItemTile({
               className="absolute bottom-1.5 right-1.5 size-10 !rounded-full bg-accent text-on-accent shadow-soft" />
           )}
         </div>
-        {/* Ровно две строки (решение владельца 2026-10-30): длинное имя не растит карточку,
-            и цены соседей в ряду стоят на одной линии. Полное имя — в подсказке и в карточке товара. */}
-        <Link to={`/catalog/${shown.id}`} title={item.name}
-          className="line-clamp-2 min-h-[2.6em] text-sm font-semibold leading-[1.3] text-ink">
-          {item.name}
+        {/* Не больше двух строк: длинное имя не растит карточку. Пустая строка под коротким
+            именем не держится (решение владельца 2026-11-13). Полное имя — в подсказке и в карточке товара. */}
+        <Link to={`/catalog/${shown.id}`} title={title}
+          className="line-clamp-2 text-sm font-semibold leading-[1.3] text-ink">
+          {title}
         </Link>
         <div data-testid="tile-price" className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
             <span className="flex min-w-0 flex-col">
-              {/* Скидка: старая цена зачёркнута красной линией, новая — зелёным под ней. */}
-              {dealOf(view) ? <DealPrice item={view} size="text-lead lg:text-lg" /> : (
-                <span className={cn('whitespace-nowrap text-lead font-extrabold tabular-nums lg:text-lg', packPriceClass(view))}>
-                  {money(view.price, currency)}
+              {/* «за кг» — справа от цены (у скидки — справа от новой). У скидки опта
+                  подпись розницы — внутри DealPrice, при зачёркнутой цене. */}
+              {dealOf(priced) ? (
+                <DealPrice item={priced} size="text-lead lg:text-lg"
+                  note={<span className="text-xs font-semibold text-ink-muted">{perUnitNote(priced, t)}</span>} />
+              ) : (
+                <span className="flex flex-wrap items-baseline gap-x-1.5">
+                  <span className={cn('whitespace-nowrap text-lead font-extrabold tabular-nums lg:text-lg', packPriceClass(view))}>
+                    {money(priced.price, currency)}
+                  </span>
+                  <span className="text-xs font-semibold text-ink-muted">{perUnitNote(priced, t)}</span>
                 </span>
               )}
-              {/* Своей строкой: «в розницу за кг» рядом с ценой налезало на круглую «+». У скидки опта
-                  подпись розницы — внутри DealPrice, при зачёркнутой цене. */}
-              {dealOf(view)?.wholesale ? null : <span className="text-xs font-semibold text-ink-muted">{perUnitNote(view, t)}</span>}
+              {lineNote}
+              {/* «Уточняется» у каждой позиции — шум: пишется только то, что что-то говорит.
+                  Числа «Свободно: N» в каталоге нет (просьба владельца 2026-11-15) — оно в карточке. */}
+              {shown.stock && shown.stock !== 'UNKNOWN'
+                ? <StockNote stock={shown.stock} short className="mt-0 text-xs" />
+                : null}
               {/* Налог и дата цены — мелко: без даты цена стала бы бессрочным обещанием. */}
               <span className="text-2xs leading-tight text-ink-subtle">{priceNote(view, t)}</span>
             </span>
           </div>
-          {taken_ ? <CartAction item={shown} taken roomy={false} look="round" /> : null}
         </div>
-        {/* В две строки, а не обрезкой: «за линейку (6 шт.)» — главное в строке опта. */}
-        <WholesaleNote item={view} className="line-clamp-2 leading-snug" />
-        {/* «Уточняется» у каждой позиции — шум: пишется только то, что что-то говорит. */}
-        {shown.available != null || (shown.stock && shown.stock !== 'UNKNOWN')
-          ? <StockNote stock={shown.stock} available={shown.available} short className="mt-0 text-xs" />
-          : null}
         <ItemFacts item={view} inline />
         {choice}
         <RatingBadge rating={item.rating} reviewCount={item.reviewCount} />
+        {/* Счётчик взятого — внизу: под ценой он сдвигал наличие, условия и рейтинг,
+            и строки карточек в ряду расходились. */}
+        {taken_ ? (
+          <div className="mt-auto pt-1">
+            <CartAction item={shown} taken roomy={false} look="round" />
+          </div>
+        ) : null}
       </article>
     );
   }
+
+  const unitNote = (
+    <span className={cn('font-semibold text-ink-muted', roomy ? 'text-body' : 'text-caption')}>
+      {perUnitNote(priced, t)}
+    </span>
+  );
 
   return (
     <article
@@ -812,12 +839,12 @@ export function ItemTile({
       </div>
 
       <div className={cn('flex flex-1 flex-col', roomy ? 'gap-3 px-[1.125rem] pb-[1.125rem] pt-4' : 'gap-2 p-3')}>
-        {/* Ровно две строки — как у плитки телефона: соседи в ряду не расходятся по высоте. */}
+        {/* Не больше двух строк, пустая строка под коротким именем не держится — как у плитки телефона. */}
         <Link
           to={`/catalog/${shown.id}`}
           title={item.name}
           className={cn(
-            'line-clamp-2 min-h-[2.6em] font-semibold leading-[1.3] text-ink transition-colors duration-300 hover:text-accent',
+            'line-clamp-2 font-semibold leading-[1.3] text-ink transition-colors duration-300 hover:text-accent',
             roomy ? 'text-lead' : 'text-body',
           )}
         >
@@ -832,31 +859,29 @@ export function ItemTile({
         {choice}
 
         <div className="flex flex-col gap-0.5">
-          {/* Скидка: старая цена зачёркнута красной линией, новая — зелёным под ней. */}
-          {dealOf(view) ? (
-            <DealPrice item={view} size={roomy ? 'text-display' : 'text-xl'} />
+          {/* Скидка: старая цена зачёркнута красной линией, новая — зелёным под ней.
+              «за кг» — справа от цены (у скидки — справа от новой), как у плитки телефона. */}
+          {dealOf(priced) ? (
+            <DealPrice item={priced} size={roomy ? 'text-display' : 'text-xl'} note={unitNote} />
           ) : (
-            <span
-              className={cn(
-                'whitespace-nowrap font-extrabold tracking-[-0.02em] tabular-nums',
-                packPriceClass(view),
-                roomy ? 'text-display' : 'text-xl',
-              )}
-            >
-              {money(view.price, currency)}
+            <span className="flex flex-wrap items-baseline gap-x-1.5">
+              <span
+                className={cn(
+                  'whitespace-nowrap font-extrabold tracking-[-0.02em] tabular-nums',
+                  packPriceClass(view),
+                  roomy ? 'text-display' : 'text-xl',
+                )}
+              >
+                {money(priced.price, currency)}
+              </span>
+              {unitNote}
             </span>
           )}
-          {dealOf(view)?.wholesale ? null : (
-            <span className={cn('font-semibold text-ink-muted', roomy ? 'text-body' : 'text-caption')}>
-              {perUnitNote(view, t)}
-            </span>
-          )}
+          {lineNote}
           <span className="text-xs text-ink-subtle">{priceNote(view, t)}</span>
-          {/* В две строки, а не обрезкой: «за линейку (6 шт.)» — главное в строке опта. */}
-          <WholesaleNote item={view} className="line-clamp-2 leading-snug" />
         </div>
 
-        <StockNote stock={shown.stock} available={shown.available} short className="mt-0 text-sm" />
+        <StockNote stock={shown.stock} short className="mt-0 text-sm" />
 
         <ItemFacts item={view} inline />
         {item.packSize ? (

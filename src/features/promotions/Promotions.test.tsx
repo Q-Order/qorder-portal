@@ -73,6 +73,36 @@ describe('акции и скидки в кабинете', () => {
     expect(screen.getByRole('switch', { name: 'Сообщать о новинках и акциях' })).toHaveAttribute('aria-checked', 'false');
   });
 
+  it('магазин только с оптом — оптовые акции, карточка с ценой упаковки по оптовой распродаже', async () => {
+    const CEMENT = {
+      ...COAT, id: 'item-9', name: 'Цемент М500', unit: 'мешок', price: 100, oldPrice: undefined, discountPercent: undefined,
+      wholesale: { unit: 'упаковка', packQty: 20, pieceUnit: 'мешок', retail: false,
+        tiers: [{ from: 1, price: 1620, oldPrice: 1800 }] },
+    };
+    const { calls } = stubFetch(rules([
+      get('/api/portal/catalog/counts', { all: 1, byCategory: {}, wholesale: 1, retail: 0, both: 0 }),
+    ], { ...PROMOTIONS, deals: [CEMENT] }));
+    renderScreen(<PromotionsPage />);
+
+    await waitFor(() => expect(calls.some((call) => call.url.includes('/api/portal/promotions?mode=WHOLESALE'))).toBe(true));
+    const card = await screen.findByTestId('deal-card');
+    expect(within(card).getByText('−10%')).toBeInTheDocument();
+    expect(within(card).getByText(/^1\s620 ₸$/)).toBeInTheDocument();
+    expect(within(card).getByText(/^1\s800 ₸$/)).toBeInTheDocument();
+  });
+
+  it('«Моя выгода» в рознице не считает оптовую заявку', async () => {
+    const cart = {
+      lines: [{ itemId: 'item-9', name: 'Цемент М500', unit: 'мешок', quantity: 2000, price: 1530, total: 200000, mode: 'WHOLESALE' }],
+      goodsTotal: 200000, total: 194000, discount: { kind: 'VOLUME', percent: 3, amount: 6000 }, skipped: [],
+    };
+    stubFetch(rules([get('/api/portal/cart', cart)], { ...PROMOTIONS, firstOrder: undefined }));
+    renderScreen(<PromotionsPage />);
+
+    expect(await screen.findByRole('heading', { name: /^От 150\s000 ₸ — −3% на всю заявку$/ })).toBeInTheDocument();
+    expect(screen.queryByText(/уже убрала/)).not.toBeInTheDocument();
+  });
+
   it('открытый раздел гасит уведомление о начале распродажи', async () => {
     const started = { id: 'n-sale', kind: 'PROMO_STARTED', createdAt: '2026-10-22T05:00:00Z', detail: '45' };
     const { calls } = stubFetch(rules([
@@ -128,7 +158,7 @@ describe('акции и скидки в кабинете', () => {
     expect(await within(deals).findByText('Пуховик Nord')).toBeInTheDocument();
     expect(within(deals).queryByText('Тренч Classic Beige')).not.toBeInTheDocument();
     expect(within(deals).getByRole('button', { name: 'Пуховики' })).toHaveAttribute('aria-pressed', 'true');
-    const asked = calls.find((call) => call.url.includes('/api/portal/catalog'));
+    const asked = calls.find((call) => call.url.includes('/api/portal/catalog?'));
     expect(asked?.url).toContain('onSale=true');
     expect(asked?.url).toContain('categoryId=cat-2');
 
@@ -410,7 +440,12 @@ describe('выгода в корзине', () => {
     expect(screen.getByTestId('cart-discount')).toHaveTextContent('только на штучные товары');
     unmount();
 
-    renderScreen(<CartSavings cart={{ ...cart, lines: [retail] }} />);
+    const { unmount: second } = renderScreen(<CartSavings cart={{ ...cart, lines: [retail] }} />);
+    expect(screen.getByTestId('cart-discount')).not.toHaveTextContent('только на штучные товары');
+    second();
+
+    // Оптовая заявка — своя скидка от всей суммы: оговорки нет.
+    renderScreen(<CartSavings cart={{ ...cart, lines: [{ ...cart.lines[1], mode: 'WHOLESALE' }] }} />);
     expect(screen.getByTestId('cart-discount')).not.toHaveTextContent('только на штучные товары');
   });
 

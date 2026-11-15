@@ -1,4 +1,4 @@
-import { takenIn } from '../cart/cartPart';
+import { lineMode, partOf, takenIn } from '../cart/cartPart';
 import { useOrderMode } from '../cart/orderMode';
 import { LoadFailed } from '../../ui/LoadFailed';
 import { useEffect, useState } from 'react';
@@ -8,7 +8,6 @@ import { ChevronLeft, Check, Clock, Layers, ShoppingCart, Ticket } from '../../u
 import {
   useGetPortalBanners,
   useGetPortalCatalog,
-  useGetPortalPromotions,
   useGetPortalSuppliers,
   type CartDto,
   type PortalPromoSaleCategory,
@@ -34,6 +33,8 @@ import { useReadOnOpen } from '../notifications/useReadOnOpen';
 import { PromoSubscription } from '../profile/PromoSubscription';
 import { HOME } from '../../ui/sectionBack';
 import { BACK } from '../shell/SectionHead';
+import { usePromoMode, usePromotions } from './usePromotions';
+import { inMode, perUnitNote } from '../catalog/itemParts';
 
 /** С какой ширины колонки товары распродажи встают в четыре карточки — как на витрине. */
 const FOUR_FROM = 1040;
@@ -65,10 +66,13 @@ const TICK_MS = 60_000;
 export function PromotionsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const promotions = useGetPortalPromotions();
+  const promotions = usePromotions();
   const data = promotions.data?.status === 200 ? promotions.data.data : undefined;
   useReadOnOpen('PROMO_STARTED');
-  const cart = cartOf(useCart().data);
+  // «Моя выгода» — по заявке того же вида, что и акции: оптовые строки не двигают розничный порог.
+  const mode = usePromoMode();
+  const full = cartOf(useCart().data);
+  const cart = full && !full.lines.every((line) => lineMode(line) === mode) ? partOf(full, mode) : full;
   const [columnRef, columnWidth] = useColumnWidth<HTMLDivElement>();
   const compact = columnWidth > 0 && columnWidth < COMPACT_BELOW;
   const banners = useGetPortalBanners();
@@ -489,8 +493,10 @@ function Deals({ deals, dealCount, rubrics, four, compact }: {
 }) {
   const { t } = useTranslation();
   const [rubric, setRubric] = useState<string | null>(null);
+  // Распродажа того же вида, что и лента: у опта она своя.
+  const channel = usePromoMode() === 'WHOLESALE' ? 'ANY_WHOLESALE' : 'ANY_RETAIL';
   const inRubric = useGetPortalCatalog(
-    { onSale: true, categoryId: rubric ?? undefined, size: RUBRIC_SIZE },
+    { onSale: true, categoryId: rubric ?? undefined, size: RUBRIC_SIZE, channel },
     { query: { enabled: rubric !== null } },
   );
   const loaded = inRubric.data?.status === 200 ? inRubric.data.data.items ?? [] : undefined;
@@ -558,7 +564,10 @@ function DealCard({ deal, inCart, compact, beyondRow = false }: {
   // «Убрать» — только из заявки, в которой клиент сейчас: розничная не трогает оптовую.
   const [orderMode] = useOrderMode();
   const mode = deal.wholesale?.retail ? orderMode : undefined;
-  const save = deal.oldPrice != null ? deal.oldPrice - deal.price : 0;
+  // Оптовая распродажа — цена упаковки по первой ступени со своей скидкой, а не розничная.
+  const wholesale = usePromoMode() === 'WHOLESALE' && deal.wholesale?.tiers.length;
+  const view = wholesale ? inMode({ ...deal, wholesale: { ...deal.wholesale!, retail: true } }, 'WHOLESALE') : deal;
+  const save = view.oldPrice != null ? view.oldPrice - view.price : 0;
 
   return (
     <article
@@ -570,17 +579,18 @@ function DealCard({ deal, inCart, compact, beyondRow = false }: {
     >
       <Link to={`/catalog/${deal.id}`} className="relative block" aria-label={deal.name}>
         <ItemThumb itemId={deal.id} src={deal.thumbnailUrl} className="h-[8rem] w-full" />
-        {deal.discountPercent ? (
+        {view.discountPercent ? (
           <span className="absolute left-2 top-2 flex h-7 items-center rounded-full bg-sale px-2.5 text-caption font-extrabold text-on-sale">
-            −{deal.discountPercent}%
+            −{view.discountPercent}%
           </span>
         ) : null}
       </Link>
       <div className="flex flex-1 flex-col gap-1.5 p-2.5">
         <h3 className="m-0 line-clamp-2 text-body font-semibold leading-tight text-ink">{deal.name}</h3>
         <div className="flex flex-wrap items-baseline gap-2">
-          <span className="text-lead font-extrabold text-sale">{money(deal.price, currency)}</span>
-          {deal.oldPrice != null && <s className="text-sm text-ink-faint">{money(deal.oldPrice, currency)}</s>}
+          <span className="text-lead font-extrabold text-sale">{money(view.price, currency)}</span>
+          {view.oldPrice != null && <s className="text-sm text-ink-faint">{money(view.oldPrice, currency)}</s>}
+          {wholesale ? <span className="text-caption text-ink-muted">{perUnitNote({ unit: view.unit }, t)}</span> : null}
         </div>
         {save > 0 && !compact && (
           <span className="text-caption font-semibold text-ink-muted">{t('promotions.v2.saving', { amount: money(save, currency) })}</span>

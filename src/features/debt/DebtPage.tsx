@@ -308,7 +308,8 @@ function Tile({ name, checked, onChange, children, className }: {
 }) {
   return (
     <label className={cn(
-      'flex min-h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-[1.25rem] border-[3px] border-solid px-3 py-2 text-center text-body font-extrabold leading-tight',
+      // `relative`: скрытая радиокнопка не выпадает из прокручиваемого ряда и не раздвигает страницу вбок.
+      'relative flex min-h-16 cursor-pointer flex-col items-center justify-center gap-1 rounded-[1.25rem] border-[3px] border-solid px-3 py-2 text-center text-body font-extrabold leading-tight',
       'focus-within:ring-2 focus-within:ring-accent',
       checked ? 'border-shop bg-ok-soft text-ok-ink' : 'border-line bg-surface text-ink', className,
     )}>

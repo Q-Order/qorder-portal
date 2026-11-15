@@ -15,6 +15,7 @@ import {
 } from '../../api/generated';
 import { CartBar } from '../cart/CartBar';
 import { QuantityField } from '../cart/QuantityField';
+import { LineQuantity } from '../cart/LineQuantity';
 import { LinkedLineThumb } from '../cart/LineThumb';
 import { FavoriteButton } from './FavoriteButton';
 import { money } from '../../shared/format';
@@ -154,6 +155,15 @@ export function FavoritesPage() {
 function FavoriteRow({ item }: { item: FavoriteItemDto }) {
   const { t } = useTranslation();
   const currency = useSupplierCurrency();
+  // Одежда оптом — линейками (2026-11-15): цена за штуку, ниже цена линейки, количество — линейками, как на плитке.
+  const [orderMode] = useOrderMode();
+  const wholesale = item.wholesale;
+  const firstTier = wholesale?.tiers[0];
+  const byLine = item.available && !!wholesale?.linePieces && wholesale.piecePrice !== undefined && !!firstTier
+    && (orderMode === 'WHOLESALE' || !wholesale.retail);
+  const price = byLine ? wholesale!.piecePrice : item.price;
+  const unit = byLine ? wholesale!.pieceUnit ?? item.unit : item.unit;
+  const oldPrice = byLine ? undefined : item.oldPrice;
   return (
     <div data-testid="favorite-row" className={cn('flex gap-3 p-3', !item.available && 'opacity-70')}>
       {/*
@@ -180,20 +190,25 @@ function FavoriteRow({ item }: { item: FavoriteItemDto }) {
           <p className="text-body font-medium text-ink">{item.name}</p>
         )}
 
-        {item.available && item.price != null ? (
+        {item.available && price != null ? (
           // Цена уже со скидкой распродажи — та же, что на витрине; рядом
           // зачёркнутая старая и «−N%», а сама цена цветом скидки, как на плитке.
           <p className="flex flex-wrap items-baseline gap-x-2 text-body tabular-nums">
-            <span className={cn('font-semibold', item.oldPrice !== undefined ? 'text-sale' : 'text-ink')}>
-              {money(item.price, currency)}
+            <span className={cn('font-semibold', oldPrice !== undefined ? 'text-sale' : 'text-ink')}>
+              {money(price, currency)}
             </span>
-            {item.oldPrice !== undefined ? (
+            {oldPrice !== undefined ? (
               <span className="flex items-center gap-1.5 text-caption">
-                <s className="text-ink-faint">{money(item.oldPrice, currency)}</s>
+                <s className="text-ink-faint">{money(oldPrice, currency)}</s>
                 {item.discountPercent ? <span className="font-bold text-sale-ink">−{item.discountPercent}%</span> : null}
               </span>
             ) : null}
-            {item.unit ? <span className="text-caption text-ink-subtle">· {item.unit}</span> : null}
+            {unit ? <span className="text-caption text-ink-subtle">· {unit}</span> : null}
+            {byLine ? (
+              <span data-testid="favorite-line" className="basis-full text-caption text-ink-muted">
+                {t('item.line.price', { pieces: wholesale!.linePieces, price: money(firstTier!.price, currency) })}
+              </span>
+            ) : null}
           </p>
         ) : (
           // Не «недоступна», а кто и что сделал: клиенту нужно понять, что ждать
@@ -201,7 +216,8 @@ function FavoriteRow({ item }: { item: FavoriteItemDto }) {
           <p className="text-caption text-gone">{t('favorites.gone')}</p>
         )}
         {/* Количество — под ценой, а не сбоку: сбоку оно сжимало имя в столбик в два слова. */}
-        {item.available && item.unit && <QuantityField itemId={item.itemId} unit={item.unit} className="mt-1 w-full max-w-[14rem]" />}
+        {byLine ? <LineQuantity itemId={item.itemId} minLines={firstTier!.from} className="mt-1 w-full max-w-[14rem]" />
+          : item.available && item.unit && <QuantityField itemId={item.itemId} unit={item.unit} className="mt-1 w-full max-w-[14rem]" />}
       </div>
 
       {/*

@@ -263,6 +263,12 @@ export const rules = {
     currency: { required: true },
     note: { required: false, maxLength: 500 },
   },
+  PromoChannelDto: {
+    saleTitle: { required: false, maxLength: 60 },
+    saleText: { required: false, maxLength: 200 },
+    saleStartsOn: { required: false },
+    saleEndsOn: { required: false },
+  },
   SavePromoSettingsRequest: {
     saleTitle: { required: false, maxLength: 60, example: "Осенняя распродажа верхней одежды" },
     saleText: { required: false, maxLength: 200 },
@@ -311,6 +317,9 @@ export const rules = {
   SetPortalCityRequest: {
     country: { required: true, pattern: /^(?:[A-Z]{2})$/, example: "KZ" },
     cityName: { required: false, maxLength: 128, example: "Измир" },
+  },
+  SetWholesaleLinesRequest: {
+
   },
   SetCartLineRequest: {
     mode: { required: false },
@@ -437,6 +446,13 @@ export const rules = {
   ReorderSellerUnitsRequest: {
 
   },
+  SaveSectionEntryRequest: {
+    name: { required: true, maxLength: 255, example: "Платья" },
+    parentId: { required: false },
+  },
+  SetCategoryImageRequest: {
+    imageUrl: { required: false, maxLength: 2048, example: "https://drive.google.com/file/d/1AbC_dEfG-42/view" },
+  },
   ItemPrice: {
     id: { required: true },
   },
@@ -454,6 +470,19 @@ export const rules = {
   },
   SaveModelVariantsRequest: {
     article: { required: false, maxLength: 64, example: "LOW-CIT" },
+  },
+  SaveSizeChartRequest: {
+
+  },
+  SizeChartRow: {
+    measure: { required: true, example: "CHEST" },
+    label: { required: false, maxLength: 40, example: "Длина рукава" },
+  },
+  ColourLineSizeQty: {
+    itemId: { required: true },
+  },
+  SaveColourLineRequest: {
+
   },
   ReorderItemMediaRequest: {
 
@@ -510,9 +539,6 @@ export const rules = {
   SaveItemCategoryRequest: {
     name: { required: true, maxLength: 255, example: "Сухие смеси" },
     parentId: { required: false },
-  },
-  SetCategoryImageRequest: {
-    imageUrl: { required: false, maxLength: 2048, example: "https://drive.google.com/file/d/1AbC_dEfG-42/view" },
   },
   BulkVisibilityRequest: {
 
@@ -861,6 +887,11 @@ export const rules = {
   DeliverStopRequest: {
     code: { required: true, maxLength: 32, example: "4821" },
   },
+  CreateCustomerTaskRequest: {
+    kind: { required: true },
+    note: { required: false, maxLength: 500, example: "Спросить, почему перестал заказывать" },
+    dueOn: { required: false, example: "2026-11-14" },
+  },
   ReceiveCustomerPaymentRequest: {
     method: { required: true, example: "KASPI" },
     comment: { required: false, maxLength: 500 },
@@ -875,6 +906,12 @@ export const rules = {
   },
   DeclineAccessRequest: {
     reason: { required: false, maxLength: 500, example: "Работаем только с Астаной" },
+  },
+  CreateCustomerTasksRequest: {
+
+  },
+  PlaceSectionsRequest: {
+
   },
   CreateModelColour: {
     name: { required: true, maxLength: 120, example: "шоколад" },
@@ -899,6 +936,11 @@ export const rules = {
   },
   ApplyIndustryRequest: {
 
+  },
+  CellFix: {
+    sheet: { required: false },
+    column: { required: true },
+    value: { required: true, maxLength: 1000, example: "9500" },
   },
   ColumnMapping: {
 

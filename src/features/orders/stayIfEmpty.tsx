@@ -29,7 +29,9 @@ export function useStayIfEmpty() {
 /** «Не добавлено» с причинами — или «класть нечего», если причин сервер не назвал. */
 export function NothingAdded({ skipped }: { skipped: SkippedLineDto[] | null }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   if (skipped === null) return null;
-  if (skipped.length > 0) return <SkippedNotice skipped={skipped} />;
+  // «Взять N линеек» положило линейку — корзина уже не пустая: к оформлению, как после удачного повтора.
+  if (skipped.length > 0) return <SkippedNotice skipped={skipped} onTaken={() => navigate('/checkout')} />;
   return <p role="alert" className="m-0 text-sm text-gone">{t('orders.nothingToRepeat')}</p>;
 }

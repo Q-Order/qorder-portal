@@ -193,6 +193,21 @@ describe('оболочка кабинета', () => {
     expect(screen.queryByRole('banner')).not.toBeInTheDocument();
   });
 
+  it('в «Моих заявках» «Главная» не горит — ни внизу на телефоне, ни в шапке монитора', async () => {
+    stubFetch([get('/api/portal/orders', []), ...shellRules()]);
+    await renderShell({ route: '/orders' });
+    const tabs = await screen.findByRole('navigation', { name: 'Главное меню' });
+    expect(within(tabs).getByRole('link', { name: 'Главная' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('в «Моих заявках» на мониторе «Главная» в шапке не горит', async () => {
+    stubWideScreen();
+    stubFetch([get('/api/portal/orders', []), ...shellRules()]);
+    await renderShell({ route: '/orders' });
+    const bar = await screen.findByTestId('client-bar');
+    expect(within(bar).getByRole('link', { name: 'Главная' })).not.toHaveAttribute('aria-current');
+  });
+
   it('на телефоне у «Сообщений» — число непрочитанного', async () => {
     const notification = (id: string) => ({ id, draftId: `draft-${id}`, kind: 'ACCEPTED', createdAt: '2026-09-03T09:00:00Z' });
     stubFetch([get('/api/portal/notifications', [notification('n1'), notification('n2')]), ...shellRules(filledCart)]);

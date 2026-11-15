@@ -1,6 +1,8 @@
+import { positionCount } from './cartPart';
 import { useTranslation } from 'react-i18next';
 import type { CartDto } from '../../api/generated';
 import { decimal, money } from '../../shared/format';
+import { quantityWithUnit } from '../../shared/units';
 import { useSupplierCurrency } from '../../supplier/SupplierCurrency';
 import { isPieceUnit } from '../catalog/soldBy';
 import { useCountUp } from '../../ui/motion/useCountUp';
@@ -14,11 +16,17 @@ import { useCountUp } from '../../ui/motion/useCountUp';
  */
 function goodsLabel(cart: CartDto, t: ReturnType<typeof useTranslation>['t']): string {
   const lines = cart.lines;
-  if (lines.length > 0 && lines.every((line) => isPieceUnit(line.unit))) {
+  // Оптовая строка целыми упаковками считается упаковками: «4 упаковки», а не «40 шт.».
+  const packs = lines.map((line) => line.mode === 'WHOLESALE' && line.split && line.split.packs > 0 && !line.split.rest ? line.split : undefined);
+  const unit = packs[0]?.packUnit;
+  if (unit && packs.every((pack) => pack?.packUnit === unit)) {
+    return t('cart.goodsAmount', { amount: quantityWithUnit(packs.reduce((sum, pack) => sum + pack!.packs, 0), unit) });
+  }
+  if (lines.length > 0 && packs.every((pack) => !pack) && lines.every((line) => isPieceUnit(line.unit))) {
     const pieces = lines.reduce((sum, line) => sum + line.quantity, 0);
     return t('cart.goodsPieces', { amount: decimal(pieces) });
   }
-  return t('checkout.summary.goodsCount', { count: lines.length });
+  return t('checkout.summary.goodsCount', { count: positionCount(lines) });
 }
 
 /**

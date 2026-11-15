@@ -247,7 +247,8 @@ export function MediaGallery({
         {topLeft && <div className="absolute left-4 top-4">{topLeft}</div>}
         {topRight && <div className="absolute right-4 top-4">{topRight}</div>}
         {/* Над полосой роликов, если она есть: метки не закрывают кнопки кадров. */}
-        {bottomLeft && <div className={cn('pointer-events-none absolute left-4', videos.length > 0 ? 'bottom-12' : 'bottom-4')}>{bottomLeft}</div>}
+        {/* На телефоне панель покупки заезжает на снимок (`-mt-5` в карточке) — метки выше её края. */}
+        {bottomLeft && <div className={cn('pointer-events-none absolute left-4', videos.length > 0 ? 'bottom-12' : 'bottom-8 md:bottom-4')}>{bottomLeft}</div>}
 
         {videos.length > 0 && (
           <div className="absolute bottom-1 left-2 flex items-center gap-1">

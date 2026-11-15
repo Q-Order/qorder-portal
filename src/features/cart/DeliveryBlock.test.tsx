@@ -257,6 +257,19 @@ describe('единственный способ получения', () => {
     await vi.waitFor(() => expect(onChangeSpy).toHaveBeenCalledWith({ methodId: 'pickup-1' }));
   });
 
+  // Продавец без способа самовывоза, но с точкой: «Самовывоз» не должен тут же возвращаться к доставке (2026-11-15).
+  it('выбранный «Самовывоз» не перебивается единственной доставкой', async () => {
+    stubOptions({ ...deliveryOptions, pickupPoints: [{ id: 'p1', name: 'Склад', address: 'Абая 1' }] });
+
+    renderScreen(<Harness initial={{}} />, { supplierId: 'supplier-1' });
+
+    expect(await screen.findByRole('button', { name: 'Доставка' })).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(screen.getByRole('button', { name: 'Самовывоз' }));
+    expect(screen.getByRole('button', { name: 'Самовывоз' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('radio', { name: /Склад, Абая 1/ })).toBeInTheDocument();
+    expect(screen.queryByText('Адрес доставки')).not.toBeInTheDocument();
+  });
+
   it('из двух способов не выбирается ничего', async () => {
     const onChangeSpy = vi.fn();
     stubOptions({

@@ -8,14 +8,14 @@ import {
 } from '../../api/generated';
 import { dayMonth, money } from '../../shared/format';
 import { cn } from '../../ui/cn';
-import { ChevronDown, ChevronRight, ClipboardList, Clock, LayoutGrid, LogOut, Package, PenLine, Truck, User, Wallet, type IconComponent } from '../../ui/icons';
+import { ChevronDown, ChevronRight, Clock, LayoutGrid, LogOut, Package, PenLine, Truck, User, Wallet, type IconComponent } from '../../ui/icons';
 import { answerText, kindOf } from '../orders/myOrdersModel';
 import { useLogoutConfirm } from '../shell/LogoutConfirm';
 import { PhoneLine } from '../shell/PhoneLine';
 import { ShopTile } from '../shell/ShopTile';
 import { HeaderCity } from '../city/HeaderCity';
 import { useCurrentShop } from '../shell/Shops';
-import { HomeCart, HomeMessages, HomeRepeat } from './homeIcons';
+import { HomeShowcase, TileAsk, TileOrders, TileRepeat } from './homeIcons';
 import { useAllShops } from '../allShops/useAllShops';
 import { useSupplierCurrency } from '../../supplier/SupplierCurrency';
 
@@ -56,10 +56,10 @@ export function HomePage() {
       {/* Телефон: шапки нет — город стоит в строке «кто вошёл», справа (просьба владельца 2026-11-11). */}
       <div className="flex items-center gap-2 lg:hidden">
       <details className="group relative min-w-0 flex-1">
-        <summary className="qo-hit flex h-12 w-full cursor-pointer list-none items-center gap-2 rounded-full border-2 border-line bg-surface px-3.5 text-body font-extrabold text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden">
-          <User aria-hidden="true" className="size-4 shrink-0" />
+        <summary className={`qo-hit flex h-12 w-full cursor-pointer list-none items-center gap-2 rounded-full border-2 border-transparent px-3.5 text-body font-extrabold ${PILL} text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent [&::-webkit-details-marker]:hidden`}>
+          <User aria-hidden="true" className="size-5 shrink-0" />
           <span className="min-w-0 flex-1 truncate">{name ?? t('shell.profile')}</span>
-          <ChevronDown aria-hidden="true" className="size-4 shrink-0 transition-transform group-open:rotate-180" />
+          <ChevronDown aria-hidden="true" className="size-5 shrink-0 transition-transform group-open:rotate-180" />
         </summary>
         <div className="absolute inset-x-0 top-full z-20 mt-2 flex flex-col gap-1 rounded-[var(--radius-tile)] border border-line bg-surface p-2 shadow-[0_12px_32px_-12px_rgba(0,0,0,.35)]">
           <Link to="/profile" className="flex min-h-12 items-center gap-2 rounded-[var(--radius-control)] px-3 font-bold text-ink hover:bg-sunk focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
@@ -73,7 +73,7 @@ export function HomePage() {
           </button>
         </div>
       </details>
-      <HeaderCity className="qo-hit h-12 max-w-[45%] border-2 border-line bg-surface px-3.5 font-extrabold" />
+      <HeaderCity className={`qo-hit h-12 max-w-[45%] border-2 border-transparent px-3.5 font-extrabold ${PILL}`} />
       </div>
       {/*
         Баннер магазина (решение владельца 2026-11-05): знак, имя, часы и адрес — внутри обложки цвета
@@ -95,7 +95,7 @@ export function HomePage() {
           {/* «Другие магазины» стала «Все магазины» (ряд 17 канвы): число — дела во всех магазинах. */}
           <Link to="/all-shops"
             className="qo-hit flex h-9 items-center gap-1.5 rounded-full bg-white pl-3.5 pr-1.5 text-caption font-extrabold text-on-white no-underline shadow-[0_6px_16px_-8px_rgba(0,0,0,.45)] transition-transform hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-shop">
-            <LayoutGrid aria-hidden="true" className="size-4" />
+            <LayoutGrid aria-hidden="true" className="size-5" />
             {t('home.allShops')}
             {tasks > 0
               ? <span role="img" aria-label={t('home.allShopsTasks', { count: tasks })} className="flex h-6 min-w-6 items-center justify-center rounded-full bg-sale px-1.5 text-caption text-on-sale">{tasks}</span>
@@ -121,9 +121,11 @@ export function HomePage() {
         </div>
       </section>
 
-      {/* «Все разделы» — сразу под баннером (решение владельца 2026-11-05). */}
-      <Link to="/more" className="flex min-h-14 items-center gap-3 rounded-[var(--radius-tile)] border-2 border-line bg-surface px-3.5 py-2 text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:min-h-16 lg:px-5">
-        <LayoutGrid aria-hidden="true" className="size-6 shrink-0 text-shop-ink" />
+      <div className={PANEL_TRIAL ? cn('flex flex-col', PANEL) : 'contents'}>
+      {/* «Все разделы» — сразу под баннером (решение владельца 2026-11-05). Мелкие значки «Главной» — все 20 px:
+          у Phosphor линия — доля рисунка, и 16/24 px давали разную толщину (просьба владельца 2026-11-15). */}
+      <Link to="/more" className={`flex min-h-14 items-center gap-3 rounded-[var(--radius-tile)] border-2 border-transparent bg-surface px-3.5 py-2 text-ink ${ROW} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:min-h-16 lg:px-5`}>
+        <LayoutGrid aria-hidden="true" className="size-5 shrink-0 text-shop-ink" />
         <span className="flex min-w-0 flex-1 flex-col">
           <b className="text-body font-extrabold lg:text-lead">{t('home.allSections')}</b>
           <span className="text-caption font-semibold text-ink-muted max-lg:hidden">{t('home.allSectionsHint')}</span>
@@ -135,19 +137,14 @@ export function HomePage() {
         {name ? t('home.hello', { name: name.split(' ')[0] }) : t('home.helloAnon')}
       </h1>
 
-      <ul aria-label={t('home.sections')} className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4">
-        <Tile to="/catalog" icon={HomeCart} label={t('home.order')} tone={TILE.order} iconTone={ICON.order}
-          // Крупнее соседей (просьба владельца 2026-11-09); -my-1.5 держит подпись на одной линии с соседями.
-          iconSize="size-11 -my-1.5 lg:size-14" />
-        <Tile to="/orders" icon={ClipboardList} label={t('home.myOrders')} tone={TILE.orders} iconTone={ICON.orders}
+      <ul aria-label={t('home.sections')} className={TILES_PANEL}>
+        <Tile to="/catalog" icon={HomeShowcase} label={t('home.order')} tone={TILE.order} iconTone={ICON.order} />
+        <Tile to="/orders" icon={TileOrders} label={t('home.myOrders')} tone={TILE.orders} iconTone={ICON.orders}
           badge={going.length || undefined} badgeLabel={t('home.inProgress', { count: going.length })} />
-        <Tile to={last ? `/orders/${last.id}` : '/orders'} icon={HomeRepeat} label={t('home.likeLastTime')} tone={TILE.repeat} iconTone={ICON.repeat}
-          iconSize="size-11 -my-1.5 lg:size-14" />
-        <Tile to="/questions" icon={HomeMessages} label={t('home.askSeller')} tone={TILE.ask} iconTone={ICON.ask}
-          // Крупнее соседей на телефоне (просьба владельца 2026-11-06): облачко читалось мелким.
-          // -my-1.5: крупный значок не сдвигает подпись — она на одной линии с соседней плиткой.
-          iconSize="size-11 -my-1.5 lg:my-0 lg:size-11" />
+        <Tile to={last ? `/orders/${last.id}` : '/orders'} icon={TileRepeat} label={t('home.likeLastTime')} tone={TILE.repeat} iconTone={ICON.repeat} />
+        <Tile to="/questions" icon={TileAsk} label={t('home.askSeller')} tone={TILE.ask} iconTone={ICON.ask} />
       </ul>
+      </div>
 
       {/*
         Своё, а не общее (просьба владельца 2026-11-05): под заголовком «Требует внимания», и у каждой карточки
@@ -158,12 +155,12 @@ export function HomePage() {
           <h2 id="home-attention" className="m-0 mt-1 text-caption font-extrabold uppercase tracking-[0.04em] text-ink-muted lg:text-body">
             {t('home.attention')}
           </h2>
-          <div className="grid gap-2.5 lg:grid-cols-2 lg:gap-4">
+          <div className={PANEL_TRIAL ? cn('grid gap-1 lg:gap-2', current && owed && 'lg:grid-cols-2', PANEL) : 'grid gap-2.5 lg:grid-cols-2 lg:gap-4'}>
             {current && <CurrentOrder order={current} />}
             {owed && (
-              <Link to="/debt" className="flex items-center gap-3 rounded-[var(--radius-tile)] border-2 border-sale bg-surface px-3.5 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:gap-4 lg:px-5 lg:py-3">
+              <Link to="/debt" className={`flex items-center gap-3 rounded-[var(--radius-tile)] border-2 bg-surface ${PANEL_TRIAL ? ROW : 'border-sale'} px-3.5 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:gap-4 lg:px-5 lg:py-3`}>
                 <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-sale-soft text-sale-ink lg:size-12">
-                  <Wallet className="size-5 lg:size-6" />
+                  <Wallet className="size-5" />
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="text-caption font-bold text-ink-muted lg:text-caption">{t('home.card.debt')}</span>
@@ -183,11 +180,29 @@ export function HomePage() {
 }
 
 /**
+ * Белые блоки «Главной» — без рамок, с лёгкой тенью: семь бежевых обводок подряд резали глаз
+ * (владелец 2026-11-14). Цветная рамка — только у того, что требует внимания: заявка и долг.
  * Цвета плиток «Главной». Временно все белые, как «Мои заявки» (просьба владельца 2026-11-06, на пробу).
  * Откат — вернуть прежние: order 'bg-shop text-on-shop', repeat 'border-hit-ink/25 bg-hit-soft text-hit-ink',
  * ask 'border-ok-ink/25 bg-ok-soft text-ok-ink'.
  */
-const WHITE_TILE = 'border-line bg-surface text-ink';
+/**
+ * Проба 2026-11-14: плитки — не кнопки, а части одной белой панели (фон панели и плиток один,
+ * без рамок и теней). Откат — PANEL_TRIAL = false: снова отдельные белые плитки с тенью.
+ */
+const PANEL_TRIAL = true;
+/** Белая панель, на которой лежат плитки и строки; у самих строк — тот же фон, без рамки. */
+const PANEL = 'rounded-[1.5rem] bg-surface p-1 shadow-soft lg:rounded-[1.75rem] lg:p-2';
+/** Строка внутри панели («Все разделы», заявка, долг) — плоская, темнеет при наведении. */
+const ROW = PANEL_TRIAL ? 'border-transparent hover:bg-sunk' : 'border-transparent shadow-soft';
+/** Профиль и город над баннером (телефон): при пробе — без белой подложки, просто строка. */
+const PILL = PANEL_TRIAL ? 'bg-transparent hover:bg-surface' : 'bg-surface shadow-soft';
+const TILES_PANEL = PANEL_TRIAL
+  ? 'grid grid-cols-2 gap-0 lg:grid-cols-4 lg:gap-2'
+  : 'grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-4';
+const WHITE_TILE = PANEL_TRIAL
+  ? 'bg-surface text-ink hover:bg-sunk'
+  : 'bg-surface text-ink shadow-soft hover:-translate-y-0.5';
 const TILE = { order: WHITE_TILE, orders: WHITE_TILE, repeat: WHITE_TILE, ask: WHITE_TILE };
 /**
  * Значки плиток — одним цветом, как значки нижнего меню (третья проба владельца 2026-11-06:
@@ -202,15 +217,15 @@ function pickCurrent(going: PortalOrderDto[]): PortalOrderDto | undefined {
   return [...going].sort((a, b) => rank(a) - rank(b) || b.createdAt.localeCompare(a.createdAt))[0];
 }
 
-function Tile({ to, icon: Icon, label, tone, iconTone, iconSize = 'size-8 lg:size-11', badge, badgeLabel }: {
+// Все значки плиток — одного размера, как у «Каталога товаров» и «Повторить заказ» (просьба владельца
+// 2026-11-13); -my-1.5 держит подписи плиток на одной линии.
+function Tile({ to, icon: Icon, label, tone, iconTone, badge, badgeLabel }: {
   to: string;
   icon: IconComponent;
   label: string;
   tone: string;
   /** Цвет одного значка; пусто — цвета текста плитки. */
   iconTone?: string;
-  /** Размер значка: телефон и монитор. */
-  iconSize?: string;
   badge?: number;
   badgeLabel?: string;
 }) {
@@ -221,10 +236,10 @@ function Tile({ to, icon: Icon, label, tone, iconTone, iconSize = 'size-8 lg:siz
         className={cn(
           // Невысокие плитки (просьба владельца 2026-11-04): вся «Главная» — магазин, плитки, заявка,
           // долг и «Все разделы» — помещается в один экран без прокрутки.
-          'relative flex h-[5.5rem] flex-col items-center justify-center gap-1.5 rounded-[1.25rem] border-[3px] border-transparent p-2 text-center',
-          'text-lead font-extrabold leading-tight transition-transform hover:-translate-y-0.5',
+          'relative flex h-full min-h-[5.5rem] flex-col items-center justify-center gap-1.5 rounded-[1.25rem] border-[3px] border-transparent p-2 text-center',
+          'text-lead font-extrabold leading-tight transition-[transform,background-color]',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2',
-          'lg:h-[8.5rem] lg:gap-3 lg:rounded-[1.5rem] lg:text-title',
+          'lg:min-h-[8.5rem] lg:gap-3 lg:rounded-[1.5rem] lg:text-title',
           tone,
         )}
       >
@@ -234,7 +249,9 @@ function Tile({ to, icon: Icon, label, tone, iconTone, iconSize = 'size-8 lg:siz
             {badge}
           </span>
         ) : null}
-        <Icon aria-hidden="true" className={cn(iconSize, iconTone)} />
+        {/* Значок не сжимается: на узком телефоне подпись в две строки ужимала его до 30 px при 44 px
+            у «Мои заявки» в одну строку (2026-11-15). Плитка с такой подписью — чуть выше, `min-h`. */}
+        <Icon aria-hidden="true" className={cn('size-11 shrink-0 -my-1.5 lg:size-14', iconTone)} />
         {label}
       </Link>
     </li>
@@ -268,10 +285,10 @@ function CurrentOrder({ order }: { order: PortalOrderDto }) {
       to={`/orders/${order.id}`}
       data-testid="home-current"
       aria-label={`${t('home.yourOrder')}: ${look.title}`}
-      className="flex items-center gap-3 rounded-[var(--radius-tile)] border-2 border-shop bg-surface px-3.5 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:gap-4 lg:px-5 lg:py-3"
+      className={`flex items-center gap-3 rounded-[var(--radius-tile)] border-2 bg-surface ${PANEL_TRIAL ? ROW : 'border-shop'} px-3.5 py-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent lg:gap-4 lg:px-5 lg:py-3`}
     >
       <span aria-hidden="true" className={cn('flex size-10 shrink-0 items-center justify-center rounded-full lg:size-12', look.tone)}>
-        <Icon className="size-5 lg:size-6" />
+        <Icon className="size-5" />
       </span>
       <span className="flex min-w-0 flex-1 flex-col">
         {/* К чему карточка — номер и сумма заявки; ниже — что случилось и что сделать. */}
@@ -281,8 +298,8 @@ function CurrentOrder({ order }: { order: PortalOrderDto }) {
         <b className="text-body font-extrabold text-ink lg:text-lead">{look.title}</b>
         {look.hint ? <span className="text-caption text-ink-muted lg:text-body">{look.hint}</span> : null}
       </span>
-      <span className="flex h-11 shrink-0 items-center gap-1 rounded-[var(--radius-control)] border-2 border-line px-4 text-body font-extrabold text-ink max-lg:hidden">
-        {t('home.look')}<ChevronRight aria-hidden="true" className="size-6" />
+      <span className="flex h-11 shrink-0 items-center gap-1 rounded-[var(--radius-control)] px-4 text-body font-extrabold text-shop-ink max-lg:hidden">
+        {t('home.look')}<ChevronRight aria-hidden="true" className="size-5" />
       </span>
       <ChevronRight aria-hidden="true" className="size-5 shrink-0 text-ink-muted lg:hidden" />
     </Link>

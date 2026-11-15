@@ -146,7 +146,8 @@
       "delivery": "Delivery and pickup",
       "more": "All sections",
       "profile": "Your profile and settings"
-    }
+    },
+    "searchClear": "Clear search"
   },
   "auth": {
     "appName": "Customer account",
@@ -325,6 +326,7 @@
     "sheetTitle": "Basket",
     "panelTitle": "Basket",
     "goodsPieces": "Products, {{amount}} pcs",
+    "goodsAmount": "Products, {{amount}}",
     "vatRate": "VAT {{rate}}%",
     "noVat": "VAT not charged",
     "empty": "The basket is empty. Pick items in the catalogue.",
@@ -360,7 +362,7 @@
       "retailOnly": "single-piece items only"
     },
     "saved": "You save",
-    "adult": "The order has 21+ items. Show an ID at pickup.",
+    "adult": "The order has {{age}}+ items. Show an ID at pickup.",
     "close": "Close the basket",
     "added": "Added: {{name}}",
     "open": "Open the basket",
@@ -389,17 +391,31 @@
     "mode": {
       "label": "How you order",
       "RETAIL": "Retail",
-      "WHOLESALE": "Wholesale",
-      "only": {
-        "RETAIL": "This item is sold at retail only",
-        "WHOLESALE": "This item is sold wholesale only"
-      }
+      "WHOLESALE": "Wholesale"
     },
     "creditLimit": "This total is above your credit limit with the seller — they will confirm shipping separately. You can still send the order",
     "clearAll": "Clear cart",
     "clearSure": "Clear for sure?",
     "lineSaving": "you save {{saving}}",
-    "lineSavingWhy": "At the regular price: {{amount}} × {{price}} = {{full}}. You pay {{total}} — {{saving}} less."
+    "lineSavingWhy": "At the regular price: {{amount}} × {{price}} = {{full}}. You pay {{total}} — {{saving}} less.",
+    "lineRow": {
+      "title": "{{name}} · size run {{range}}",
+      "piece": "{{price}} per pc",
+      "inside": "What's in the size run",
+      "summary": "{{lines}} · {{pieces}} pcs at {{price}}",
+      "changed": "size run changed"
+    },
+    "lines": {
+      "unitCount_one": "{{count}} size run",
+      "unitCount_other": "{{count}} size runs",
+      "less": "One size run less",
+      "more": "One more size run",
+      "unit_one": "size run",
+      "unit_other": "size runs",
+      "toCart": "Add a size run",
+      "take_one": "Take {{count}} size run",
+      "take_other": "Take {{count}} size runs"
+    }
   },
   "checkout": {
     "title": "Place your request",
@@ -523,7 +539,6 @@
       "wide3": "Send to the seller",
       "next": "Next",
       "back": "Back",
-      "receiveChosen": "Method chosen — you can change it",
       "receiveLater": "Not chosen — the seller will clarify",
       "change": "Change",
       "titleExtras": "Loaders and carrier",
@@ -542,7 +557,9 @@
       "change": "If anything changes, you will see it and decide yourself whether to agree.",
       "pickup": "When the request is ready, the seller hands over the goods the way you chose.",
       "decide": "If anything changes, you decide whether to agree.",
-      "deliver": "When it's ready, pick it up or get it delivered at the chosen time."
+      "deliver": "When it's ready, pick it up or get it delivered at the chosen time.",
+      "collect": "When the order is ready, you'll pick it up yourself.",
+      "bring": "When the order is ready, it will be delivered at the chosen time."
     },
     "payLater": "No payment now — the seller will check stock and confirm the order",
     "part": {
@@ -673,7 +690,7 @@
     "badge": {
       "hit": "Bestseller",
       "new": "New",
-      "adult": "21+",
+      "adult": "{{age}}+",
       "sale": "Sale",
       "saleNew": "Sale + new",
       "retail": "Retail",
@@ -686,13 +703,25 @@
     "facts": {
       "min": "Minimum order {{amount}}",
       "step": "Sold by {{amount}}",
-      "adult": "Sold to people aged 21+ — show an ID at pickup"
+      "adult_one": "Sold to people aged {{count}}+ — show an ID at pickup",
+      "adult_few": "Sold to people aged {{count}}+ — show an ID at pickup",
+      "adult_many": "Sold to people aged {{count}}+ — show an ID at pickup",
+      "adult_other": "Sold to people aged {{count}}+ — show an ID at pickup"
     },
     "age": {
-      "title": "Are you 21 or older?",
-      "text": "“{{name}}” is sold only to people aged 21 and over. The seller will ask for an ID when you pick up the order.",
-      "yes": "Yes, I am 21 or older",
-      "no": "No, back to the catalogue"
+      "no": "No, back to the catalogue",
+      "title_one": "Are you {{count}} or older?",
+      "title_few": "Are you {{count}} or older?",
+      "title_many": "Are you {{count}} or older?",
+      "title_other": "Are you {{count}} or older?",
+      "text_one": "“{{name}}” is sold only to people aged {{count}} and over. The seller will ask for an ID when you pick up the order.",
+      "text_few": "“{{name}}” is sold only to people aged {{count}} and over. The seller will ask for an ID when you pick up the order.",
+      "text_many": "“{{name}}” is sold only to people aged {{count}} and over. The seller will ask for an ID when you pick up the order.",
+      "text_other": "“{{name}}” is sold only to people aged {{count}} and over. The seller will ask for an ID when you pick up the order.",
+      "yes_one": "Yes, I am {{count}} or older",
+      "yes_few": "Yes, I am {{count}} or older",
+      "yes_many": "Yes, I am {{count}} or older",
+      "yes_other": "Yes, I am {{count}} or older"
     },
     "quickOrder": "Quick order",
     "priceList": {
@@ -795,7 +824,11 @@
       "label": "How you order: wholesale or retail",
       "WHOLESALE": "Wholesale",
       "RETAIL": "Retail",
-      "models": "items: {{count}}"
+      "models": "items: {{count}}",
+      "only": {
+        "WHOLESALE": "This item is sold wholesale only",
+        "RETAIL": "This item is sold retail only"
+      }
     },
     "sortPhone": {
       "POPULAR": "Popular",
@@ -810,6 +843,10 @@
     "rubricAll": "All of “{{name}}”"
   },
   "orders": {
+    "lineRow": {
+      "pieces": "{{pieces}} pcs",
+      "piecesAt": "{{pieces}} pcs × {{price}}"
+    },
     "expectedOn": "arrives {{date}}",
     "delivery": {
       "title": "Delivery",
@@ -846,15 +883,6 @@
     "total": "Total",
     "collecting": "Collecting…",
     "repeat": "Repeat the previous order",
-    "state": {
-      "SUBMITTED": "Sent",
-      "IN_REVIEW": "Under review",
-      "AWAITING_CONFIRMATION": "Your answer needed",
-      "ACCEPTED": "Accepted",
-      "CLOSED": "Closed",
-      "READY": "Ready for pickup",
-      "ISSUED": "Handed over"
-    },
     "orderFrom": "Request of {{day}}",
     "sellerAnswer": "The seller's reply",
     "agreeAria": "I agree with the changes in the request of {{day}}",
@@ -1013,7 +1041,8 @@
         "delivery": "The seller named the delivery cost",
         "loaders": "The seller named the loaders cost",
         "both": "The seller named the delivery and loaders cost"
-      }
+      },
+      "filtersMenu": "Order filters"
     },
     "returns": {
       "title": "Return {{no}}",
@@ -1145,7 +1174,20 @@
       "open": "Open templates",
       "failed": "Could not save — try again"
     },
-    "nothingToRepeat": "Nothing to add to the cart: this order has no products that can be ordered now."
+    "nothingToRepeat": "Nothing to add to the cart: this order has no products that can be ordered now.",
+    "period": {
+      "open": "Filter by date",
+      "title": "Orders for a period",
+      "apply": "Show",
+      "reset": "Clear period: {{period}}",
+      "presets": {
+        "all": "All time",
+        "today": "Today",
+        "week": "Last 7 days",
+        "month": "Last 30 days",
+        "custom": "Custom dates"
+      }
+    }
   },
   "templates": {
     "title": "Templates",
@@ -1211,6 +1253,8 @@
       "gone": "No longer sold",
       "quantity": "Quantity: {{name}}",
       "remove": "Remove",
+      "line": "Size run {{range}} · {{pieces}} pcs",
+      "lines": "How many size runs: {{name}}",
       "removeAria": "Remove from template: {{name}}",
       "lastLine": "The last item cannot be removed — delete the template if you no longer need it.",
       "failed": "Could not save — try again",
@@ -1721,10 +1765,7 @@
     "similarInCart": "In cart",
     "variantOption": "{{name}}: {{value}}",
     "soldBy": {
-      "label": "Sold",
-      "piece": "Sold by the piece",
-      "pieceValue": "by the piece",
-      "stepValue": "by {{amount}}"
+      "piece": "Sold by the piece"
     },
     "sizeGuide": {
       "link": "How to choose a size",
@@ -1765,31 +1806,70 @@
       "next": "{{amount}} more — and the price is {{price}} per {{unit}}"
     },
     "deal": {
-      "delivery": "Delivery",
-      "pickup": "Pickup",
-      "freeFrom": "free from {{amount}}",
-      "priceFrom": "from {{amount}}",
-      "negotiable": "price by agreement"
+      "both": "Delivery and pickup available",
+      "delivery": "Delivery available",
+      "pickup": "Pickup only"
     },
     "inCartSum": "In cart · {{sum}}",
     "addSum": "Add · {{sum}}",
-    "sizes": {
-      "title": "Several sizes at once",
-      "oneEach": "1 of each size",
-      "size": "Size",
-      "price": "Price",
-      "quantity": "Qty, {{unit}}",
-      "quantityOf": "Quantity of size {{size}}",
-      "put": "To cart: {{amount}} · {{sum}}",
-      "putEmpty": "Enter quantities",
-      "done": "Cart updated",
-      "failed": "Size {{size}}: {{reason}}",
-      "hint": "What is already in the cart is shown here too. The cart works out wholesale packs and discounts for each size itself."
+    "lineTiers": {
+      "title": "How many size runs",
+      "hint": "One size run is {{pieces}} pcs: every size of this colour. Pick an option — we'll add that many size runs to the cart.",
+      "flat": "The price per piece is the same for any quantity.",
+      "piecesLabel": "Pieces in total",
+      "pieces": "{{pieces}} pcs",
+      "pieceLabel": "Price per piece",
+      "belowRetail": "−{{percent}}% vs retail",
+      "linesPrice_one": "Price for {{count}} size run",
+      "linesPrice_other": "Price for {{count}} size runs",
+      "savedLabel": "You save",
+      "next_one": "{{count}} more size run — and it's {{price}} per pc",
+      "next_other": "{{count}} more size runs — and it's {{price}} per pc"
+    },
+    "line": {
+      "title": "Size run",
+      "tableCaption": "Sizes in one size run: {{systems}} and how many pieces",
+      "inLine": "In the run",
+      "missing": "out",
+      "none": "No full size run in stock — can't order wholesale now",
+      "available": "Full size runs in stock: {{count}}",
+      "belowMin": "Full size runs in stock: {{count}}, wholesale starts at {{from}}. Can't order wholesale now",
+      "pieces_one": "{{count}} pc",
+      "pieces_other": "{{count}} pcs",
+      "price": "Size run of {{pieces}} pcs — {{price}}",
+      "rule": "Wholesale is sold only by the full size run. Single sizes — at retail.",
+      "ruleOnly": "Wholesale is sold only by the full size run."
     },
     "mode": {
       "from": "from {{price}} per {{unit}}"
     },
-    "substitutes": "In stock — could replace it"
+    "substitutes": "In stock — could replace it",
+    "articles": "Art.",
+    "articlesMore": "Show all ({{count}})",
+    "articlesLess": "Show less",
+    "sizeSystem": "Size system",
+    "sizeChart": {
+      "link": "Size chart",
+      "title": "Size chart",
+      "rus": "RUS",
+      "intl": "INT",
+      "howTo": "How to find your size?",
+      "measures": {
+        "MAKER": "Maker size",
+        "EUR": "EUR",
+        "AGE": "Age",
+        "HEIGHT": "Height, cm",
+        "CHEST": "Chest, cm",
+        "WAIST": "Waist, cm",
+        "HIPS": "Hips, cm",
+        "NECK": "Neck, cm",
+        "INSEAM": "Inseam, cm",
+        "CUSTOM": "Own measure"
+      },
+      "scroll": "Scroll the table sideways →"
+    },
+    "sizeMissing": "n/a",
+    "sizeSoldOut": "out of stock"
   },
   "design": {
     "toCartShort": "Add to cart",
@@ -1837,7 +1917,8 @@
     "inPress": "What is inside",
     "inPack": "What is in the pack",
     "total": "Total",
-    "size": "press · {{amount}}"
+    "size": "press · {{amount}}",
+    "pressNote": "{{unit}} of {{pieces}} pcs — {{price}}"
   },
   "maps": {
     "pick": "Set on the map",

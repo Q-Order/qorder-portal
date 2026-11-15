@@ -1,3 +1,4 @@
+import { positionCount } from './cartPart';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { cartOf, useCart } from './useCart';
@@ -19,7 +20,7 @@ export function CartBar() {
   const { t } = useTranslation();
   const currency = useSupplierCurrency();
   const cart = cartOf(useCart().data);
-  const positions = cart?.lines.length ?? 0;
+  const positions = positionCount(cart?.lines);
   if (positions === 0) return null;
 
   return (
