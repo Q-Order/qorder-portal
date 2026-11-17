@@ -11,6 +11,7 @@ const renegotiated = {
   id: 'order-1',
   state: 'AWAITING_CONFIRMATION',
   needsAnswer: true,
+  offerId: 'offer-1',
   cancellable: true,
   createdAt: '2026-09-01T10:00:00Z',
   total: 12500,
@@ -161,7 +162,10 @@ describe('заявка на пересогласовании', () => {
     await userEvent.click(await screen.findByRole('button', { name: /согласен со всем/i }));
 
     await waitFor(() => {
-      expect(calls.some((call) => call.url.includes('/confirm'))).toBe(true);
+      const call = calls.find((c) => c.url.includes('/confirm'));
+      expect(call).toBeDefined();
+      // Согласие относится к увиденному предложению, а не к тому, что ждёт сейчас.
+      expect(JSON.parse(String(call!.init?.body))).toEqual({ offerId: 'offer-1' });
     });
     expect(await screen.findByText(/ответ отправлен/i)).toBeInTheDocument();
   });
@@ -505,6 +509,7 @@ describe('ответ по строкам', () => {
       const call = calls.find((c) => c.url.includes('/answer'));
       expect(call).toBeDefined();
       expect(JSON.parse(String(call!.init?.body))).toEqual({
+        offerId: 'offer-1',
         lines: [{ lineId: 'l1', decision: 'ACCEPT' }, { lineId: 'l2', decision: 'WAIT' }],
       });
     });
@@ -539,8 +544,28 @@ describe('ответ по строкам', () => {
 
     await waitFor(() => {
       const call = calls.find((c) => c.url.includes('/decline'));
-      expect(JSON.parse(String(call!.init?.body))).toEqual({ reason: 'PRICE' });
+      // Отказ — от того предложения, которое клиент видел.
+      expect(JSON.parse(String(call!.init?.body))).toEqual({ offerId: 'offer-1', reason: 'PRICE' });
     });
+  });
+
+  it('отказ от уже заменённого предложения не проходит — клиенту сказано посмотреть новое', async () => {
+    stubFetch([
+      get('/api/portal/orders/order-1', substituted),
+      {
+        match: (url, init) => url.includes('/order-1/decline') && init?.method === 'POST',
+        status: 409,
+        body: { code: 'PORTAL_OFFER_CHANGED', detail: 'Предложение по заявке изменилось' },
+      },
+    ]);
+
+    openOrder();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Отказаться от заявки…' }));
+    const dialog = screen.getByTestId('decline-dialog');
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Отказаться' }));
+
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Продавец уже изменил предложение');
   });
 
   it('«Отменить заявку» до принятия — тоже через окно', async () => {

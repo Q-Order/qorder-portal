@@ -65,7 +65,8 @@ export function useCheckout(initialDelivery?: SubmitOrderDelivery) {
   // Отказ без своего объяснения (сбой сервера, обрыв сети) — «не отправлена»;
   // «корзина пуста» на повторе — заявка, скорее всего, ушла, а ответ потерялся.
   // Раньше на такие отказы экран молчал, и человек не знал, ушла ли заявка.
-  const [failed, setFailed] = useState<'error' | 'maybeSent' | null>(null);
+  // «Часть ушла» — те же позиции отправлены с другой вкладки: заявки нет, корзина перечитывается.
+  const [failed, setFailed] = useState<'error' | 'maybeSent' | 'partlySent' | null>(null);
   const options = useDeliveryOptions();
   // Товары — до скидки на заявку: скидка стоит отдельной строкой ниже,
   // и сумма к оплате складывается у человека на глазах.
@@ -95,7 +96,9 @@ export function useCheckout(initialDelivery?: SubmitOrderDelivery) {
         setClosed(info?.code === 'TENANT_INTAKE_CLOSED');
         const code = info?.code as string | undefined;
         setFailed(code === 'CART_STALE' || code === 'TENANT_INTAKE_CLOSED' ? null
-          : code === 'PORTAL_CART_EMPTY' ? 'maybeSent' : 'error');
+          : code === 'PORTAL_CART_EMPTY' ? 'maybeSent'
+            : code === 'PORTAL_CART_CHANGED' ? 'partlySent' : 'error');
+        if (code === 'PORTAL_CART_CHANGED') void queryClient.invalidateQueries({ queryKey: getGetPortalCartQueryKey() });
         if (info?.code === 'CART_STALE') {
           setStale(info);
           // Корзина в теле отказа — уже пересчитанная: кладём её в кеш,

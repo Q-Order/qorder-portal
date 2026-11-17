@@ -518,6 +518,10 @@
       "title": "Your request may already be sent",
       "note": "The cart is empty: the request may have gone through while the reply was lost. Check it in My requests."
     },
+    "partlySent": {
+      "title": "Some items have already been sent",
+      "note": "They went out in another order — from another tab or device. The cart has been updated: check it and send again."
+    },
     "closed": {
       "title": "The supplier is temporarily not accepting orders",
       "note": "Your cart is saved — send it once the supplier resumes taking orders."
@@ -1133,6 +1137,7 @@
       "agreeAll": "Agree to everything",
       "declineAll": "Decline the order…",
       "failed": "The answer was not sent. Please try again.",
+      "offerChanged": "The seller has already changed the offer — review the new one and answer it.",
       "answer": "Answer item by item",
       "answerAria": "Answer item by item in the order of {{day}}",
       "viewItem": "View the item: photos and description",

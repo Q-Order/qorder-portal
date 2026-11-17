@@ -30,6 +30,7 @@ const needsAnswer = order({
   orderNumber: '1046',
   state: 'AWAITING_CONFIRMATION',
   needsAnswer: true,
+  offerId: 'offer-need',
   createdAt: '2026-09-04T10:00:00Z',
   total: 62500,
   proposedTotal: 61500,

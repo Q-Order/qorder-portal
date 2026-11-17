@@ -47,6 +47,10 @@ export function LineAnswers({ order, onAsk, onDecline, onAnswered, busy }: {
       void queryClient.invalidateQueries({ queryKey: getGetMyPortalOrdersQueryKey() });
       void queryClient.invalidateQueries({ queryKey: getGetMyPortalOrderQueryKey(order.id) });
     },
+    // Предложение заменили, пока клиент смотрел старое: перечитываем заявку, чтобы он увидел новое.
+    onError: (error: unknown) => {
+      if (offerChangedIn(error)) void queryClient.invalidateQueries({ queryKey: getGetMyPortalOrderQueryKey(order.id) });
+    },
   };
   const answer = useAnswerMyPortalOrder({ mutation: refresh });
   const confirm = useConfirmMyPortalOrder({ mutation: refresh });
@@ -60,7 +64,10 @@ export function LineAnswers({ order, onAsk, onDecline, onAnswered, busy }: {
   const other = order.diff.filter((change) => !change.lineId);
   const rows = [...lines.values()];
   const complete = rows.every((row) => decisions[row.lineId!] !== undefined);
+  // Ответ относится к предложению, которое клиент видит: без него сервер не поймёт, на что «да».
+  const offerId = order.offerId;
   const pending = busy || answer.isPending || confirm.isPending;
+  const offerChanged = offerChangedIn(answer.error) || offerChangedIn(confirm.error);
   const failed = answer.isError || confirm.isError
     || (answer.data !== undefined && answer.data.status !== 200)
     || (confirm.data !== undefined && confirm.data.status !== 200);
@@ -73,10 +80,10 @@ export function LineAnswers({ order, onAsk, onDecline, onAnswered, busy }: {
   const total = (order.proposedTotal ?? 0) - dropped;
 
   const send = () => {
-    if (!complete || pending) return;
+    if (!complete || pending || !offerId) return;
     answer.mutate({
       id: order.id,
-      data: { lines: rows.map((row) => ({ lineId: row.lineId!, decision: decisions[row.lineId!] })) },
+      data: { offerId, lines: rows.map((row) => ({ lineId: row.lineId!, decision: decisions[row.lineId!] })) },
     });
   };
 
@@ -143,16 +150,20 @@ export function LineAnswers({ order, onAsk, onDecline, onAnswered, busy }: {
           {t('orders.lines.total', { total: money(total, order.currency) })}
         </p>
       ) : null}
-      {failed ? <p role="alert" className="m-0 mt-2 text-sm text-gone">{t('orders.lines.failed')}</p> : null}
+      {failed ? (
+        <p role="alert" className="m-0 mt-2 text-sm text-gone">
+          {t(offerChanged ? 'orders.lines.offerChanged' : 'orders.lines.failed')}
+        </p>
+      ) : null}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {rows.length > 0 ? (
-          <Button size="lg" disabled={!complete || pending} onClick={send}>
+          <Button size="lg" disabled={!complete || pending || !offerId} onClick={send}>
             {answer.isPending ? t('orders.sending') : t('orders.lines.send')}
           </Button>
         ) : null}
-        <Button size="lg" variant={rows.length > 0 ? 'outline' : 'primary'} disabled={pending}
-          onClick={() => confirm.mutate({ id: order.id })}>
+        <Button size="lg" variant={rows.length > 0 ? 'outline' : 'primary'} disabled={pending || !offerId}
+          onClick={() => offerId && confirm.mutate({ id: order.id, data: { offerId } })}>
           {confirm.isPending ? t('orders.sending') : t('orders.lines.agreeAll')}
         </Button>
       </div>
@@ -217,4 +228,9 @@ function acceptLabel(row: SnapshotDiffDto, t: TFunction): string {
 /** Цитата строки для вопроса — то, что клиент видел. */
 function quote(row: SnapshotDiffDto, order: PortalOrderDto, t: TFunction): string {
   return row.kind === 'LINE_REPLACED' ? `${headline(row, t)} ${replacement(row, order, t)}` : headline(row, t);
+}
+
+/** Ответ на предложение, которое продавец уже заменил новым, — сервер отказал. */
+export function offerChangedIn(error: unknown): boolean {
+  return (error as { info?: { code?: unknown } } | null)?.info?.code === 'PORTAL_OFFER_CHANGED';
 }

@@ -4718,6 +4718,8 @@ export interface PortalOrderDto {
   saleMode?: PortalOrderDtoSaleMode;
   /** Наличие позиций на сейчас — только у открытой заявки (отправлена, на проверке, ждёт подтверждения) и только в карточке заявки, не в списке. Бронь самой заявки не вычитается. Пусто — заявка не открыта или продавец наличие не показывает */
   stock?: PortalLineStockDto[];
+  /** Предложение, которое ждёт ответа: его id передаётся в `confirm` и `answer`, чтобы ответ относился к увиденной редакции. Пусто — отвечать не на что */
+  offerId?: string;
 }
 
 /**
@@ -9970,6 +9972,8 @@ export interface LineDecisionDto {
  * Ответ по строкам пересогласования
  */
 export interface AnswerOrderRequest {
+  /** Предложение, на которое клиент отвечает, — `offerId` из карточки заявки. Если его уже заменили новым — 409 */
+  offerId: string;
   /**
      * Решения по изменённым строкам
      * @minItems 0
@@ -16242,6 +16246,44 @@ export interface ExchangeOrderDto {
   lines: ExchangeOrderLineDto[];
   /** Заказ отменён в Q-Order: документ этой ревизии в 1С снять (сторнировать или пометить на удаление); незаведённый — пропустить и подтвердить */
   cancelled: boolean;
+}
+
+/**
+ * Согласие с предложением
+ */
+export interface ConfirmOrderRequest {
+  /** Предложение, с которым клиент согласен, — `offerId` из карточки заявки. Если его уже заменили новым — 409 */
+  offerId: string;
+}
+
+/**
+ * Причина
+ */
+export type DeclineOfferRequestReason = typeof DeclineOfferRequestReason[keyof typeof DeclineOfferRequestReason];
+
+
+export const DeclineOfferRequestReason = {
+  REPLACEMENT: 'REPLACEMENT',
+  PRICE: 'PRICE',
+  WAIT: 'WAIT',
+  BOUGHT_ELSEWHERE: 'BOUGHT_ELSEWHERE',
+  OTHER: 'OTHER',
+} as const;
+
+/**
+ * Отказ от предложения
+ */
+export interface DeclineOfferRequest {
+  /** Предложение, от которого клиент отказывается, — `offerId` из карточки заявки. Если его уже заменили новым — 409 */
+  offerId: string;
+  /** Причина */
+  reason?: DeclineOfferRequestReason;
+  /**
+     * Своими словами — обязателен по смыслу у OTHER
+     * @minLength 0
+     * @maxLength 500
+     */
+  comment?: string;
 }
 
 export type CommerceMlExchangeParams = {
@@ -56625,7 +56667,7 @@ export const getDeclineMyPortalOrderUrl = (id: string,) => {
  * @summary Отказываюсь
  */
 export const declineMyPortalOrder = async (id: string,
-    declineOrderRequest?: DeclineOrderRequest, options?: Parameters<typeof apiRequest>[1]): Promise<declineMyPortalOrderResponse> => {
+    declineOfferRequest: DeclineOfferRequest, options?: Parameters<typeof apiRequest>[1]): Promise<declineMyPortalOrderResponse> => {
 
     const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
     if (!h) return {};
@@ -56646,7 +56688,7 @@ return apiRequest<declineMyPortalOrderResponse>(getDeclineMyPortalOrderUrl(id),
     ...options,
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
-    body: JSON.stringify(declineOrderRequest)
+    body: JSON.stringify(declineOfferRequest)
   }
 );}
 
@@ -56684,9 +56726,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type DeclineMyPortalOrderMutationResult = NonNullable<Awaited<ReturnType<typeof declineMyPortalOrder>>>
-    export type DeclineMyPortalOrderMutationBody = DeclineOrderRequest | undefined
+    export type DeclineMyPortalOrderMutationBody = DeclineOfferRequest
     export type DeclineMyPortalOrderMutationError = ErrorResponse
-    export type DeclineMyPortalOrderMutationVariables = {id: string;data?: DeclineOrderRequest}
+    export type DeclineMyPortalOrderMutationVariables = {id: string;data: DeclineOfferRequest}
 
     /**
  * @summary Отказываюсь
@@ -56758,14 +56800,29 @@ export const getConfirmMyPortalOrderUrl = (id: string,) => {
  * 2. Негативный 409: подтвердить заявку, которая ответа не ждёт. Успех означал бы согласие на состав, которого не показывали.
  * @summary Подтверждаю
  */
-export const confirmMyPortalOrder = async (id: string, options?: Parameters<typeof apiRequest>[1]): Promise<confirmMyPortalOrderResponse> => {
+export const confirmMyPortalOrder = async (id: string,
+    confirmOrderRequest: ConfirmOrderRequest, options?: Parameters<typeof apiRequest>[1]): Promise<confirmMyPortalOrderResponse> => {
 
-  return apiRequest<confirmMyPortalOrderResponse>(getConfirmMyPortalOrderUrl(id),
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return apiRequest<confirmMyPortalOrderResponse>(getConfirmMyPortalOrderUrl(id),
   {
     ...options,
-    method: 'POST'
-
-
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(confirmOrderRequest)
   }
 );}
 
@@ -56790,9 +56847,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
       const mutationFn: MutationFunction<Awaited<ReturnType<typeof confirmMyPortalOrder>>, ConfirmMyPortalOrderMutationVariables> = (props) => {
-          const {id} = props ?? {};
+          const {id,data} = props ?? {};
 
-          return  confirmMyPortalOrder(id,requestOptions)
+          return  confirmMyPortalOrder(id,data,requestOptions)
         }
 
 
@@ -56803,9 +56860,9 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type ConfirmMyPortalOrderMutationResult = NonNullable<Awaited<ReturnType<typeof confirmMyPortalOrder>>>
-
+    export type ConfirmMyPortalOrderMutationBody = ConfirmOrderRequest
     export type ConfirmMyPortalOrderMutationError = ErrorResponse
-    export type ConfirmMyPortalOrderMutationVariables = {id: string}
+    export type ConfirmMyPortalOrderMutationVariables = {id: string;data: ConfirmOrderRequest}
 
     /**
  * @summary Подтверждаю

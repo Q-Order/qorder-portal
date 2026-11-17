@@ -283,7 +283,7 @@ function Notices({ checkout }: { checkout: Checkout }) {
         <div role="alert" className={box}>
           <p className="font-semibold text-ink">{t(`checkout.${failed}.title`)}</p>
           <p className="text-sm text-ink-muted">{t(`checkout.${failed}.note`)}</p>
-          {failed === 'maybeSent' && (
+          {(failed === 'maybeSent' || failed === 'partlySent') && (
             <Link to="/orders" className="self-start text-sm font-semibold text-accent underline">{t('orders.title')}</Link>
           )}
         </div>
