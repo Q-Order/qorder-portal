@@ -15,6 +15,7 @@ import {
   getGetMyPortalOrderQueryKey,
   getGetMyPortalOrdersQueryKey,
   getGetPortalNotificationsQueryKey,
+  getGetPortalUnreadSummaryQueryKey,
   useFillPortalCartFromOrder,
   useGetPortalNotifications,
   useReadPortalNotification,
@@ -87,7 +88,13 @@ export function OrderPage() {
   // На телефоне список ведёт сюда ссылкой, и гасить их больше негде.
   const notifications = useGetPortalNotifications();
   const read = useReadPortalNotification({
-    mutation: { onSuccess: () => void queryClient.invalidateQueries({ queryKey: getGetPortalNotificationsQueryKey() }) },
+    // Сводку тоже: из неё число у «Уведомлений» в «Сообщениях» и счётчики магазинов.
+    mutation: {
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getGetPortalNotificationsQueryKey() });
+        void queryClient.invalidateQueries({ queryKey: getGetPortalUnreadSummaryQueryKey() });
+      },
+    },
   });
   const unreadHere = (notifications.data?.status === 200 ? notifications.data.data : [])
     .filter((notification) => isAboutOrder(notification, id)).map((notification) => notification.id);

@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetPortalNotificationsQueryKey,
+  getGetPortalUnreadSummaryQueryKey,
   useGetMyPortalOrders,
   useGetPortalNotifications,
   useReadPortalNotification,
@@ -38,7 +39,11 @@ export function MyOrdersPage() {
   const notifications = useGetPortalNotifications();
   const read = useReadPortalNotification({
     mutation: {
-      onSuccess: () => void queryClient.invalidateQueries({ queryKey: getGetPortalNotificationsQueryKey() }),
+      // Сводку тоже: из неё число у «Уведомлений» в «Сообщениях» и счётчики магазинов.
+      onSuccess: () => {
+        void queryClient.invalidateQueries({ queryKey: getGetPortalNotificationsQueryKey() });
+        void queryClient.invalidateQueries({ queryKey: getGetPortalUnreadSummaryQueryKey() });
+      },
     },
   });
   const orders: PortalOrderDto[] = useMemo(

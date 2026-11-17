@@ -177,7 +177,8 @@ export function NotificationsBell({
             aria-hidden="true"
             className="absolute right-1.5 top-1.5 min-w-4 rounded-full bg-accent px-1 text-2xs font-semibold leading-4 text-on-accent"
           >
-            {list.length}
+            {/* Список сервер отдаёт не длиннее ста: больше 99 — «99+», как у колокольчика менеджера. */}
+            {list.length > 99 ? '99+' : list.length}
           </span>
         )}
       </button>

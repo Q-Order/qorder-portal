@@ -25,7 +25,16 @@ const PROXIED = ['/api', '/actuator'];
  */
 const VENDOR = /[\\/]node_modules[\\/](react|react-dom|scheduler|react-router|react-router-dom|@tanstack[\\/]react-query|@tanstack[\\/]query-core|@mantine[\\/](core|hooks)|i18next|react-i18next|i18next-browser-languagedetector|oidc-client-ts)[\\/]/;
 const SERVER_REACT = /[\\/]react-dom[\\/](server|cjs[\\/]react-dom-server)/;
-const manualChunks = (id: string) => (VENDOR.test(id) && !SERVER_REACT.test(id) ? 'vendor' : undefined);
+/**
+ * Русский словарь (~180 КБ) — отдельным куском, как во front. Он нужен на старте и
+ * не ленивый: Vite ставит его в index.html на параллельную загрузку. Зато выкладка
+ * кода без новых подписей не заставляет клиента заново качать словарь, и наоборот.
+ */
+const RU_DICTIONARY = /[\\/]src[\\/]i18n[\\/]ru\.json$/;
+const manualChunks = (id: string) => {
+  if (RU_DICTIONARY.test(id)) return 'i18n-ru';
+  return VENDOR.test(id) && !SERVER_REACT.test(id) ? 'vendor' : undefined;
+};
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), 'VITE_');

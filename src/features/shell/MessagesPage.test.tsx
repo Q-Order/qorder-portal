@@ -32,4 +32,18 @@ describe('«Сообщения»: сколько нового в каждом р
     expect(screen.queryByTestId('messages-count-orders')).not.toBeInTheDocument();
     expect(screen.queryByTestId('messages-count-reviews')).not.toBeInTheDocument();
   });
+
+  // Список сервер отдаёт не длиннее ста свежих: число уведомлений — из сводки, а не длиной списка.
+  it('число уведомлений — из сводки непрочитанного, а не длиной списка', async () => {
+    // Сводка — первой: заглушки сравнивают адрес вхождением, и список перехватил бы и её.
+    stubFetch([
+      get('/api/portal/notifications/summary', [{ supplierId: 'supplier-1', unread: 130 }]),
+      get('/api/portal/notifications', [note('RENEGOTIATION', 'o1'), note('ORDER_ANSWERED', 'o2'), note('QUESTION_ANSWERED', 'q1')]),
+      get('/api/portal/suppliers', [{ supplierId: 'supplier-1', name: 'Магазин', currency: 'KZT', reviews: true }]),
+    ]);
+
+    renderScreen(<MessagesPage />);
+
+    expect(await screen.findByTestId('messages-count-notifications')).toHaveTextContent('130');
+  });
 });

@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import {
   getGetPortalNotificationsQueryKey,
+  getGetPortalUnreadSummaryQueryKey,
   readPortalNotification,
   useGetPortalNotifications,
   type PortalNotificationDto,
@@ -24,6 +25,10 @@ export function useReadOnOpen(kind: PortalNotificationDto['kind']) {
   useEffect(() => {
     if (!unreadKey) return;
     void Promise.all(unreadKey.split(',').map((id) => readPortalNotification(id)))
-      .finally(() => queryClient.invalidateQueries({ queryKey: getGetPortalNotificationsQueryKey() }));
+      .finally(() => {
+        void queryClient.invalidateQueries({ queryKey: getGetPortalNotificationsQueryKey() });
+        // Сводку тоже: из неё число у «Уведомлений» в «Сообщениях» и счётчики магазинов.
+        void queryClient.invalidateQueries({ queryKey: getGetPortalUnreadSummaryQueryKey() });
+      });
   }, [unreadKey, queryClient]);
 }

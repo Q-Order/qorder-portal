@@ -8,7 +8,6 @@ import { Suspense, useCallback, useEffect, useRef, useState, type CSSProperties 
 import { useTranslation } from 'react-i18next';
 import { HomeCart, HomeCatalog, HomeDelivery, HomeHouse, HomeMessages } from '../home/homeIcons';
 import { Link, Navigate, NavLink, Route, Routes, useLocation, useNavigate, useNavigationType } from 'react-router-dom';
-import { CatalogPage } from '../catalog/CatalogPage';
 import { HomePage } from '../home/HomePage';
 import { NotificationsPage } from '../notifications/NotificationsBell';
 import { AddedToast, CartPanel } from '../cart/CartPanel';
@@ -89,8 +88,14 @@ const SuppliersPage = lazyPage(() => import('./SuppliersPage').then((module) => 
 const TemplatesPage = lazyPage(() => import('../templates/TemplatesPage').then((module) => module.TemplatesPage));
 const DebtPage = lazyPage(() => import('../debt/DebtPage').then((module) => module.DebtPage));
 const MessagesPage = lazyPage(() => import('./MessagesPage').then((module) => module.MessagesPage));
+/**
+ * Каталог — тоже кусок: кабинет открывается на «Главной», и холодный вход с телефона не тянет
+ * каталог с баннерами витрины (главный кусок 573 → 426 КБ, замер 2026-11-16). Первым
+ * в догрузке в простое — переход в каталог после первого экрана сети не ждёт.
+ */
+const CatalogPage = lazyPage(() => import('../catalog/CatalogPage').then((module) => module.CatalogPage));
 /** Все разделы-куски: догружаются в простое после первого экрана (`preloadWhenIdle`). */
-const PAGES = [NewArrivalsPage, MorePage, SuppliersPage, ItemCardPage, CheckoutPage, DeliveryInfoPage, FavoritesPage, PromotionsPage, MyOrdersPage, OrderPage, QuestionsPage, MyReviewsPage, TemplatesPage, DebtPage, MessagesPage];
+const PAGES = [CatalogPage, NewArrivalsPage, MorePage, SuppliersPage, ItemCardPage, CheckoutPage, DeliveryInfoPage, FavoritesPage, PromotionsPage, MyOrdersPage, OrderPage, QuestionsPage, MyReviewsPage, TemplatesPage, DebtPage, MessagesPage];
 
 /**
  * Куски разделов — в простое после первого экрана: первый вход в раздел не ждёт сети.

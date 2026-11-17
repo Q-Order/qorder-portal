@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { useGetPortalNotifications } from '../../api/generated';
+import { useGetPortalNotifications, useGetPortalUnreadSummary } from '../../api/generated';
 import { Bell, ChevronRight, MessageCircleQuestion, Star } from '../../ui/icons';
 import { cn } from '../../ui/cn';
-import { useCurrentShop } from './Shops';
+import { useCurrentShop, useShops } from './Shops';
 import { messageCounts } from './messageCounts';
 
 /**
@@ -17,10 +17,14 @@ import { messageCounts } from './messageCounts';
 export function MessagesPage() {
   const { t } = useTranslation();
   const reviews = useCurrentShop()?.reviews;
+  const { supplierId, unreadOf } = useShops();
+  const summary = useGetPortalUnreadSummary();
   const notifications = useGetPortalNotifications();
   const list = notifications.data?.status === 200 ? notifications.data.data : [];
   const counts = messageCounts(list);
-  const unreadAll = list.length;
+  // Точное число — из сводки: список сервер отдаёт не длиннее ста свежих (2026-11-16),
+  // и при 130 непрочитанных здесь стояло бы «100». Пока сводки нет — длина списка.
+  const unreadAll = summary.data?.status === 200 && supplierId ? unreadOf(supplierId) : list.length;
   const row = (to: string, icon: typeof Bell, label: string, count: number, warm = false) => {
     const Icon = icon;
     return (

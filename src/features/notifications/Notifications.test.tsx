@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { NotificationsBell } from './NotificationsBell';
+import { useReadOnOpen } from './useReadOnOpen';
 import { useGetPortalUnreadSummary } from '../../api/generated';
 import { renderScreen } from '../../test/render';
 import { get, method, stubFetch } from '../../test/http';
@@ -111,6 +112,35 @@ describe('уведомления кабинета', () => {
       const summaryCallsAfter = calls.filter((call) => call.url.includes('/notifications/summary')).length;
       expect(summaryCallsAfter).toBeGreaterThan(summaryCallsBefore);
     });
+  });
+
+  // Список сервер отдаёт не длиннее ста: «100» значило бы ровно сто, а их может быть больше.
+  it('больше 99 непрочитанных колокольчик показывает как «99+»', async () => {
+    const many = Array.from({ length: 100 }, (_, i) => ({ ...RENEGOTIATION, id: `n${i}`, draftId: `draft-${i}` }));
+    stubFetch([get('/api/portal/notifications', many)]);
+
+    renderScreen(<NotificationsBell />);
+
+    expect(await screen.findByTestId('notifications-count')).toHaveTextContent('99+');
+  });
+
+  // Из сводки — число у «Уведомлений» в «Сообщениях»: открытый раздел гасит и его.
+  it('открытый раздел гасит уведомления и перечитывает сводку непрочитанного', async () => {
+    const promo = { id: 'p1', kind: 'PROMO_STARTED', createdAt: '2026-09-03T09:00:00Z' };
+    const { calls } = stubFetch([
+      get('/api/portal/notifications/summary', [{ supplierId: 'supplier-1', unread: 1 }]),
+      get('/api/portal/notifications', [promo]),
+      method('POST', '/api/portal/notifications/p1/read', undefined, 204),
+    ]);
+    function PromotionsOpened() {
+      useReadOnOpen('PROMO_STARTED');
+      return null;
+    }
+
+    renderScreen(<><PromotionsOpened /><SummaryProbe /></>);
+
+    await waitFor(() => expect(calls.filter((call) => call.url.includes('/notifications/summary')).length)
+      .toBeGreaterThan(1));
   });
 
   it('без непрочитанного колокольчик не зовёт', async () => {
