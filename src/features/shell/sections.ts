@@ -12,8 +12,7 @@ import {
   Wallet,
   type IconComponent,
 } from '../../ui/icons';
-import { useGetPortalCatalogCounts, useGetPortalDebt } from '../../api/generated';
-import { NewArrivalsIcon } from '../arrivals/NewArrivalsIcon';
+import { useGetPortalDebt } from '../../api/generated';
 import { promotionsOff } from '../promotions/promotionsOff';
 import { usePromotions } from '../promotions/usePromotions';
 
@@ -27,9 +26,6 @@ export interface Section {
   path: string;
   icon: IconComponent;
 }
-
-/** «Новые поступления»: виден, пока у магазина есть действующие новинки. */
-export const ARRIVALS: Section = { key: 'newArrivals', path: '/new-arrivals', icon: NewArrivalsIcon as IconComponent };
 
 /**
  * Разделы, за которыми приходят каждый раз: витрина, корзина, свои заявки
@@ -55,21 +51,16 @@ const MAIN_SECTIONS: Section[] = [
  * акции, — так обещает продавцу предпросмотр в его настройках. Пока ответ
  * не пришёл, раздел на месте: мигающее меню хуже лишнего пункта.
  *
- * «Новые поступления» встают сразу за каталогом, пока новинки есть, — туда
- * смотрят первым делом; кончились — пункт уходит, пустой раздел не зовёт.
+ * «Новых поступлений» в меню нет: это отбор «Новинка» внутри каталога (решение владельца 2026-11-17).
  */
-export function useMainSections(enabled: boolean): { sections: Section[]; deals: number; arrivals: number } {
+export function useMainSections(enabled: boolean): { sections: Section[]; deals: number } {
   const promotions = usePromotions(enabled);
   const data = promotions.data?.status === 200 ? promotions.data.data : undefined;
   const hidden = data !== undefined && promotionsOff(data);
-  // `{}`, а не `undefined`: тот же ключ кеша, что у главной и витрины, — один запрос вместо двух.
-  const counts = useGetPortalCatalogCounts({}, { query: { enabled } });
-  const arrivals = counts.data?.status === 200 ? counts.data.data.novelty ?? 0 : 0;
   const shown = hidden ? MAIN_SECTIONS.filter((section) => section.path !== '/promotions') : MAIN_SECTIONS;
   return {
-    sections: arrivals > 0 ? [shown[0], ARRIVALS, ...shown.slice(1)] : shown,
+    sections: shown,
     deals: data?.dealCount ?? 0,
-    arrivals,
   };
 }
 

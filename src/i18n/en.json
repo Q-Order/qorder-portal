@@ -69,7 +69,6 @@
       "delivery": "Delivery and pickup",
       "profile": "Suppliers",
       "promotions": "Offers",
-      "newArrivals": "New arrivals",
       "debt": "Debt"
     },
     "sectionsTitle": "Sections",
@@ -103,7 +102,6 @@
     "tabs": {
       "home": "Home",
       "catalog": "Catalogue",
-      "newArrivals": "New",
       "promotions": "Deals",
       "checkout": "Basket",
       "orders": "Requests",
@@ -135,8 +133,6 @@
       "volume": "{{percent}}% off orders from {{amount}}",
       "firstOrder": "−{{percent}}% on your first order"
     },
-    "arrivals_one": "{{count}} new product",
-    "arrivals_other": "{{count}} new products",
     "inDebt": "Outstanding debt",
     "tips": {
       "home": "Home page",
@@ -2417,16 +2413,6 @@
     "yourClient": "your customer",
     "lead": "Your customer sees your catalogue and prices and sends an order — no chats or calls."
   },
-  "arrivals": {
-    "title": "New arrivals",
-    "lead": "Products the shop has just brought in. The “New” label stays for the period the shop has set.",
-    "empty": "No new arrivals right now — check back later.",
-    "strip": "New arrivals",
-    "stripAction": "View",
-    "today": "Today",
-    "week": "This week",
-    "earlier": "Earlier"
-  },
   "phoneCountry": {
     "KG": "Kyrgyzstan"
   },
@@ -2506,7 +2492,6 @@
       "templates": "repeat a purchase",
       "favorites": "what you liked",
       "promotions": "discounts and sale",
-      "arrivals": "new items: {{count}}",
       "messages": "everything you discuss with the seller",
       "questions": "ask about an item",
       "reviews": "item ratings",

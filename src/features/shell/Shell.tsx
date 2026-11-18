@@ -82,7 +82,6 @@ const MyOrdersPage = lazyPage(() => import('../orders/MyOrdersPage').then((modul
 const OrderPage = lazyPage(() => import('../orders/OrderPage').then((module) => module.OrderPage));
 const QuestionsPage = lazyPage(() => import('../questions/QuestionsPage').then((module) => module.QuestionsPage));
 const MyReviewsPage = lazyPage(() => import('../reviews/MyReviewsPage').then((module) => module.MyReviewsPage));
-const NewArrivalsPage = lazyPage(() => import('../arrivals/NewArrivalsPage').then((module) => module.NewArrivalsPage));
 const MorePage = lazyPage(() => import('./MorePage').then((module) => module.MorePage));
 const SuppliersPage = lazyPage(() => import('./SuppliersPage').then((module) => module.SuppliersPage));
 const TemplatesPage = lazyPage(() => import('../templates/TemplatesPage').then((module) => module.TemplatesPage));
@@ -95,7 +94,7 @@ const MessagesPage = lazyPage(() => import('./MessagesPage').then((module) => mo
  */
 const CatalogPage = lazyPage(() => import('../catalog/CatalogPage').then((module) => module.CatalogPage));
 /** Все разделы-куски: догружаются в простое после первого экрана (`preloadWhenIdle`). */
-const PAGES = [CatalogPage, NewArrivalsPage, MorePage, SuppliersPage, ItemCardPage, CheckoutPage, DeliveryInfoPage, FavoritesPage, PromotionsPage, MyOrdersPage, OrderPage, QuestionsPage, MyReviewsPage, TemplatesPage, DebtPage, MessagesPage];
+const PAGES = [CatalogPage, MorePage, SuppliersPage, ItemCardPage, CheckoutPage, DeliveryInfoPage, FavoritesPage, PromotionsPage, MyOrdersPage, OrderPage, QuestionsPage, MyReviewsPage, TemplatesPage, DebtPage, MessagesPage];
 
 /**
  * Куски разделов — в простое после первого экрана: первый вход в раздел не ждёт сети.
@@ -426,7 +425,8 @@ export function Shell() {
                 <Route path="/catalog/:itemId" element={<RequireSupplier><ItemCardPage /></RequireSupplier>} />
                 <Route path="/favorites" element={<RequireSupplier><FavoritesPage /></RequireSupplier>} />
                 <Route path="/promotions" element={<RequireSupplier><PromotionsPage /></RequireSupplier>} />
-                <Route path="/new-arrivals" element={<RequireSupplier><NewArrivalsPage /></RequireSupplier>} />
+                {/* «Новые поступления» — отбор «Новинка» каталога (2026-11-17); старые ссылки ведут туда. */}
+                <Route path="/new-arrivals" element={<Navigate to="/catalog?novelty=1" replace />} />
                 <Route path="/checkout" element={<RequireSupplier><CheckoutPage /></RequireSupplier>} />
                 <Route path="/orders" element={<RequireSupplier><MyOrdersPage /></RequireSupplier>} />
                 <Route path="/orders/:id" element={<RequireSupplier><OrderPage /></RequireSupplier>} />

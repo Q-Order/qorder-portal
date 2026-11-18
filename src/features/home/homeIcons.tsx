@@ -65,7 +65,7 @@ export const HomeShowcase = forwardRef<SVGSVGElement, IconProps>(function HomeSh
  * Размер — по «Мои заявки» (просьба владельца 2026-11-15): рисунок в высоту 5/6 плитки; поле вокруг
  * остальных обрезано в `viewBox`, иначе круг и витрина выходили мельче планшета.
  */
-const TILE_LINE = 2;
+const TILE_LINE = 2.5; // толще на просьбу владельца 2026-11-17 (было 2)
 const SAME_LINE = '[&_*]:[vector-effect:non-scaling-stroke]';
 
 function line(body: string, viewBox = '0 0 24 24'): IconComponent {

@@ -8556,6 +8556,18 @@ export interface PublishNewsRequest {
      * @maxLength 2000
      */
   body?: string;
+  /**
+     * Заголовок на казахском; пусто — казахоязычным покажется русский
+     * @minLength 0
+     * @maxLength 200
+     */
+  titleKk?: string;
+  /**
+     * Текст на казахском
+     * @minLength 0
+     * @maxLength 2000
+     */
+  bodyKk?: string;
   /** Раздел, который изменился: у пункта меню появится точка */
   feature?: PublishNewsRequestFeature;
   /**
@@ -8598,8 +8610,13 @@ export interface NewsDto {
   kind: NewsDtoKind;
   /** Раздел рабочего места (ключ меню); пусто — общая правка */
   feature?: string;
+  /** На языке запроса (`Accept-Language`), без перевода — на русском */
   title?: string;
   body?: string;
+  /** Заголовок на казахском (только платформе) */
+  titleKk?: string;
+  /** Текст на казахском (только платформе) */
+  bodyKk?: string;
   publishedAt: string;
   /** Вошедший уже видел; у платформы — всегда false */
   read: boolean;
@@ -10858,6 +10875,12 @@ export interface StaffInviteDto {
   code: string;
   /** Адрес целиком — его же кодирует QR */
   url: string;
+  /** Превью ссылки в мессенджере — заголовок (название магазина), как его видит бот */
+  previewTitle: string;
+  /** Превью — описание под заголовком */
+  previewDescription: string;
+  /** Превью — картинка (логотип магазина); пусто — превью без картинки */
+  previewImage?: string;
 }
 
 /**

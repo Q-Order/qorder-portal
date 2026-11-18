@@ -3,7 +3,7 @@ import { NothingAdded, useStayIfEmpty } from './stayIfEmpty';
 import { SaveAsTemplate } from './SaveAsTemplate';
 import { useId, useState, type ReactNode } from 'react';
 import { PhoneLine } from '../shell/PhoneLine';
-import { LineAnswers } from './LineAnswers';
+import { LineAnswers, offerChangedIn } from './LineAnswers';
 import { DeclineDialog } from './DeclineDialog';
 import { PackContents, packMembers } from '../catalog/PackContents';
 import { OrderLineGroup, orderRows } from './OrderLineGroup';
@@ -451,16 +451,25 @@ function Changes({ order, onAsk }: { order: PortalOrderDto; onAsk: (quote: strin
         setDeclining(false);
         void queryClient.invalidateQueries({ queryKey: getGetMyPortalOrdersQueryKey() });
       },
+      // Предложение заменили, пока клиент читал старое: перечитываем список — он увидит новое.
+      onError: (error: unknown) => {
+        if (offerChangedIn(error)) void queryClient.invalidateQueries({ queryKey: getGetMyPortalOrdersQueryKey() });
+      },
     },
   });
   const failed = decline.isError || (decline.data !== undefined && decline.data.status !== 200);
   return (
     <div className="flex flex-col gap-3">
-      <LineAnswers order={order} busy={decline.isPending} onAsk={onAsk}
+      <LineAnswers key={order.offerId} order={order} busy={decline.isPending} onAsk={onAsk}
         onDecline={() => setDeclining(true)} onAnswered={() => {}} />
       {declining ? (
-        <DeclineDialog pending={decline.isPending} failed={failed} onStay={() => setDeclining(false)}
-          onDecline={(reason, comment) => decline.mutate({ id: order.id, data: { reason, comment: comment || undefined } })} />
+        <DeclineDialog pending={decline.isPending} failed={failed} offerChanged={offerChangedIn(decline.error)}
+          onStay={() => setDeclining(false)}
+          onDecline={(reason, comment) => {
+            if (order.offerId) {
+              decline.mutate({ id: order.id, data: { offerId: order.offerId, reason, comment: comment || undefined } });
+            }
+          }} />
       ) : null}
     </div>
   );

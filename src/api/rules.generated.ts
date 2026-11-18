@@ -562,6 +562,8 @@ export const rules = {
   PublishNewsRequest: {
     title: { required: true, maxLength: 200, example: "Остаток можно править прямо в строке каталога" },
     body: { required: false, maxLength: 2000 },
+    titleKk: { required: false, maxLength: 200 },
+    bodyKk: { required: false, maxLength: 2000 },
     feature: { required: false },
     featureKey: { required: false, maxLength: 32, example: "catalog" },
   },
@@ -730,6 +732,7 @@ export const rules = {
     comment: { required: false, maxLength: 500, example: "Нашёл дешевле" },
   },
   AnswerOrderRequest: {
+    offerId: { required: true },
     message: { required: false, maxLength: 2000, example: "Замену беру, если цвет тёмный" },
   },
   LineDecisionDto: {
@@ -975,5 +978,13 @@ export const rules = {
   },
   HideDemandRequest: {
     text: { required: true, maxLength: 120, example: "ананас" },
+  },
+  ConfirmOrderRequest: {
+    offerId: { required: true },
+  },
+  DeclineOfferRequest: {
+    offerId: { required: true },
+    reason: { required: false, example: "PRICE" },
+    comment: { required: false, maxLength: 500, example: "Нашёл дешевле" },
   },
 } as const satisfies Record<string, Record<string, FieldRule>>;

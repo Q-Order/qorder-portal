@@ -47,6 +47,7 @@ import { HOME } from '../../ui/sectionBack';
 import { SearchField } from '../shell/layouts/headerParts';
 import { PageHelp } from '../shell/HelpGuide';
 import { usePromotions } from '../promotions/usePromotions';
+import { useReadOnOpen } from '../notifications/useReadOnOpen';
 
 // Метки и условия продажи живут в `itemParts`; карточка товара берёт их отсюда.
 export { ItemBadges, ItemFacts };
@@ -125,6 +126,8 @@ export function CatalogPage() {
   const [marks, setMarks] = useState<Marks>({ ...NO_MARKS, novelty: noveltyInAddress, promo: saleInAddress });
   const anyMark = MARKS.some((mark) => marks[mark]);
   const setMark = (mark: Mark, on: boolean) => setMarks((current) => ({ ...current, [mark]: on }));
+  // «Новые поступления» — это отбор «Новинка» (2026-11-17): открыл его — уведомления о поставке прочитаны.
+  useReadOnOpen('NEW_ARRIVALS', marks.novelty);
   // Порядок по умолчанию — «сначала популярные», как в макете: хиты
   // и новинки, которые продавец сам вынес вперёд, стоят первыми.
   const [sort, setSort] = useState<GetPortalCatalogSort>('POPULAR');
@@ -712,7 +715,7 @@ export function ItemTile({
   const [orderMode] = useOrderMode();
   const view = inMode(shown, orderMode);
   // Пресс — цена за штуку крупно, цена пресса строкой ниже (2026-11-14); метки и условия — по `view`.
-  // Одежда оптом: крупно цена штуки, мелко «Линейка 6 шт — 60 000 ₸» (описание линеек 2026-11-14, просьба владельца 2026-11-15).
+  // Одежда оптом: крупно цена штуки, мелко «Линейка 6 шт — 60 000 тг» (описание линеек 2026-11-14, просьба владельца 2026-11-15).
   const lineWholesale = view.wholesale?.linePieces && !view.wholesale.retail ? view.wholesale : undefined;
   const lineNote = lineWholesale?.tiers[0] ? (
     <span data-testid="line-note" className="text-xs font-semibold text-ink-muted">

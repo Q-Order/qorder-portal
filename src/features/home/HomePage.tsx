@@ -102,9 +102,11 @@ export function HomePage() {
               : <span aria-hidden="true" className="w-2" />}
           </Link>
           </div>
-          <div className="mt-auto flex flex-wrap items-end gap-x-6 gap-y-3">
+          {/* Телефон: номер — строкой под названием, а не справа: рядом с ним длинное название сжималось
+              в столбец, и плашка номера его перекрывала (2026-11-17). Монитор — в одну строку. */}
+          <div className="mt-auto flex flex-col items-start gap-3 lg:flex-row lg:items-end lg:gap-6">
             {/* Название и знак — не ссылка: окно магазинов открывает только «Другие магазины» (просьба владельца 2026-11-05). */}
-            <div className="flex min-w-0 flex-1 items-center gap-3.5 lg:gap-4">
+            <div className="flex w-full min-w-0 items-center gap-3.5 lg:w-auto lg:flex-1 lg:gap-4">
               {shop && (
                 <ShopTile supplier={shop} alt="" initials className="size-12 shrink-0 rounded-[0.875rem] text-xl ring-[3px] ring-white/80 lg:size-20 lg:rounded-[1.125rem] lg:text-3xl" />
               )}
@@ -236,10 +238,12 @@ function Tile({ to, icon: Icon, label, tone, iconTone, badge, badgeLabel }: {
         className={cn(
           // Невысокие плитки (просьба владельца 2026-11-04): вся «Главная» — магазин, плитки, заявка,
           // долг и «Все разделы» — помещается в один экран без прокрутки.
-          'relative flex h-full min-h-[5.5rem] flex-col items-center justify-center gap-1.5 rounded-[1.25rem] border-[3px] border-transparent p-2 text-center',
+          // Значок — на одном отступе от верха, а не по центру: иначе подпись в две строки («Каталог
+          // товаров») поднимала значок выше соседа «Мои заявки» в том же ряду (2026-11-17).
+          'relative flex h-full min-h-[5.5rem] flex-col items-center justify-start gap-1.5 rounded-[1.25rem] border-[3px] border-transparent p-2 pt-4 text-center',
           'text-lead font-extrabold leading-tight transition-[transform,background-color]',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2',
-          'lg:min-h-[8.5rem] lg:gap-3 lg:rounded-[1.5rem] lg:text-title',
+          'lg:min-h-[8.5rem] lg:gap-3 lg:rounded-[1.5rem] lg:pt-6 lg:text-title',
           tone,
         )}
       >

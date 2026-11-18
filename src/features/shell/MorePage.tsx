@@ -7,13 +7,13 @@ import { money } from '../../shared/format';
 import { useSupplierCurrency } from '../../supplier/SupplierCurrency';
 import { useLogoutConfirm } from './LogoutConfirm';
 import {
-  Bell, ChevronRight, CircleHelp, ClipboardList, Heart, LayoutTemplate, LogOut, MessageCircle, Plus, Sparkles, Star, Store, Tag,
+  Bell, ChevronRight, CircleHelp, ClipboardList, Heart, LayoutTemplate, LogOut, MessageCircle, Plus, Star, Store, Tag,
   Truck, User, Wallet, type IconComponent,
 } from '../../ui/icons';
 import { BackTitle } from '../../ui/BackTitle';
 import { FontScalePicker } from './FontScale';
 import { LanguagePicker } from './LanguagePicker';
-import { ARRIVALS, useMainSections } from './sections';
+import { useMainSections } from './sections';
 import { useCurrentShop } from './Shops';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -76,7 +76,7 @@ export function MorePage({ others, onInvite, extras }: {
   const logoutAsk = useLogoutConfirm();
   const shop = useCurrentShop();
   const currency = useSupplierCurrency();
-  const { arrivals, sections } = useMainSections(true);
+  const { sections } = useMainSections(true);
   const promotionsOn = sections.some((section) => section.path === '/promotions');
   const debt = useGetPortalDebt();
   const owed = debt.data?.status === 200 && debt.data.data.orders.length > 0 ? debt.data.data.debt : undefined;
@@ -109,9 +109,6 @@ export function MorePage({ others, onInvite, extras }: {
         )}
         {promotionsOn && (
           <Entry to="/promotions" icon={Tag} label={t('shell.sections.promotions')} hint={t('more.rows.promotions')} />
-        )}
-        {arrivals > 0 && (
-          <Entry to={ARRIVALS.path} icon={Sparkles} label={t('shell.sections.newArrivals')} hint={t('more.rows.arrivals', { count: arrivals })} />
         )}
       </Group>
 

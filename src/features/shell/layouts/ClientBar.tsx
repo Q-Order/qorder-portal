@@ -68,7 +68,7 @@ export function ClientBar({ activated, ready, others, onOpenShops, current }: {
             Кнопки с подписями и постоянной ширины (раскрытие под курсором владелец отверг 2026-11-05: перескоки).
             Только если подписи не влезают в место между магазином и профилем — остаются значки. */}
         <div ref={wrap} className="flex min-w-0 flex-1 justify-center">
-        <nav aria-label={t('shell.sectionsRail')} className={cn('flex items-center gap-1 py-2.5', compact ? 'px-0' : 'px-1.5')}>
+        <nav aria-label={t('shell.sectionsRail')} className={cn('flex items-center py-2.5', compact ? 'gap-1 px-0' : 'gap-0.5 px-1.5')}>
           <Item compact={compact} to="/home" icon={HomeHouse} label={t('shell.tabs.home')} tip={t('shell.tips.home')} active={on('/home')} />
           <Item compact={compact} to="/catalog" icon={HomeCatalog} label={t('shell.tabs.catalog')} tip={t('shell.tips.catalog')} active={on('/catalog')} />
           <Item compact={compact} to="/messages" icon={HomeMessages} label={t('shell.tabs.messages')} tip={t('shell.tips.messages')} count={unread}
@@ -154,7 +154,8 @@ function itemClass(active: boolean, compact = false): string {
     // Отклик под курсором — только transform (подъём, увеличение, вдавливание): соседей он не сдвигает.
     'group relative flex h-12 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-2xl text-body font-extrabold',
     // Одни значки (подписи не влезли) — поуже: шесть пунктов отдают ~25 точек «Оптом / В розницу» на узком мониторе.
-    compact ? 'px-2' : 'px-2.5',
+    // С подписями поля 6 px, а не 10: на 1440 точках подписям не хватало 18 из 774 (просьба владельца 2026-11-17).
+    compact ? 'px-2' : 'px-1.5',
     'transition-[transform,background-color,color,box-shadow] duration-150 ease-out motion-reduce:transition-none',
     'hover:-translate-y-0.5 hover:scale-[1.06] hover:shadow-[0_6px_16px_-6px_rgba(1,86,64,.35)] active:translate-y-0 active:scale-95',
     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',

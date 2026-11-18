@@ -19,16 +19,16 @@ export function useUnreadOf(kind: PortalNotificationDto['kind']): string[] {
  * Открытый раздел гасит уведомления своего повода: клиент увидел то, о чём они
  * сообщали, — нажимать на плашку отдельно незачем.
  */
-export function useReadOnOpen(kind: PortalNotificationDto['kind']) {
+export function useReadOnOpen(kind: PortalNotificationDto['kind'], open = true) {
   const queryClient = useQueryClient();
   const unreadKey = useUnreadOf(kind).join(',');
   useEffect(() => {
-    if (!unreadKey) return;
+    if (!open || !unreadKey) return;
     void Promise.all(unreadKey.split(',').map((id) => readPortalNotification(id)))
       .finally(() => {
         void queryClient.invalidateQueries({ queryKey: getGetPortalNotificationsQueryKey() });
         // Сводку тоже: из неё число у «Уведомлений» в «Сообщениях» и счётчики магазинов.
         void queryClient.invalidateQueries({ queryKey: getGetPortalUnreadSummaryQueryKey() });
       });
-  }, [unreadKey, queryClient]);
+  }, [open, unreadKey, queryClient]);
 }

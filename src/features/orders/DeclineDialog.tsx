@@ -14,9 +14,11 @@ const REASONS: DeclineOrderRequestReason[] = ['REPLACEMENT', 'PRICE', 'WAIT', 'B
  * всё. Главная кнопка — «Остаться», фокус на ней; опасная — «Отказаться».
  * Причину видит менеджер — вместо голого «заявка закрыта».
  */
-export function DeclineDialog({ pending, failed, onStay, onDecline }: {
+export function DeclineDialog({ pending, failed, offerChanged = false, onStay, onDecline }: {
   pending: boolean;
   failed: boolean;
+  /** Продавец заменил предложение, пока клиент его читал: отказ не принят, показано новое. */
+  offerChanged?: boolean;
   onStay: () => void;
   onDecline: (reason: DeclineOrderRequestReason | undefined, comment: string) => void;
 }) {
@@ -51,7 +53,7 @@ export function DeclineDialog({ pending, failed, onStay, onDecline }: {
             className="resize-y rounded-[var(--radius-control)] border-[1.5px] border-solid border-field-line bg-surface px-3 py-2 text-sm text-ink focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
         </>
       ) : null}
-      {failed ? <p role="alert" className="m-0 text-sm text-gone">{t('orders.declineDialog.failed')}</p> : null}
+      {failed ? <p role="alert" className="m-0 text-sm text-gone">{t(offerChanged ? 'orders.lines.offerChanged' : 'orders.declineDialog.failed')}</p> : null}
       <div className="flex flex-wrap gap-2">
         <Button ref={stay} size="lg" onClick={onStay}>{t('orders.declineDialog.stay')}</Button>
         <Button size="lg" variant="outline" className="text-gone" disabled={pending}

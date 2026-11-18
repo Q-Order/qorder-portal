@@ -32,7 +32,7 @@ import { RateOrder } from './RateOrder';
 import { ReportProblem } from './ReportProblem';
 import { PickupCode } from './PickupCode';
 import { BACK } from '../shell/SectionHead';
-import { LineAnswers } from './LineAnswers';
+import { LineAnswers, offerChangedIn } from './LineAnswers';
 import { DeclineDialog } from './DeclineDialog';
 import { OrderDelivery } from './OrderDelivery';
 import { OrderReturns } from './OrderReturns';
@@ -115,7 +115,15 @@ export function OrderPage() {
       void queryClient.invalidateQueries({ queryKey: getGetMyPortalOrdersQueryKey() });
     },
   };
-  const decline = useDeclineMyPortalOrder({ mutation: refresh });
+  const decline = useDeclineMyPortalOrder({
+    mutation: {
+      ...refresh,
+      // Предложение заменили, пока клиент читал старое: перечитываем заявку — он увидит новое.
+      onError: (error: unknown) => {
+        if (offerChangedIn(error)) void queryClient.invalidateQueries({ queryKey: getGetMyPortalOrderQueryKey(id) });
+      },
+    },
+  });
   const cancel = useCancelMyPortalOrder({ mutation: refresh });
 
   /*
@@ -261,16 +269,19 @@ export function OrderPage() {
       ) : null}
 
       {order.needsAnswer && (
-        <LineAnswers order={order} busy={busy} onAnswered={() => setAnswered(true)}
+        <LineAnswers key={order.offerId} order={order} busy={busy} onAnswered={() => setAnswered(true)}
           onAsk={(quote) => setAsking({ quote })} onDecline={() => setDeclining(true)} />
       )}
 
       {declining ? (
-        <DeclineDialog pending={busy} failed={declineFailed} onStay={() => setDeclining(false)}
+        <DeclineDialog pending={busy} failed={declineFailed} offerChanged={offerChangedIn(decline.error)}
+          onStay={() => setDeclining(false)}
           onDecline={(reason, comment) => {
             const data = { reason, comment: comment || undefined };
-            if (order.needsAnswer) decline.mutate({ id, data });
-            else cancel.mutate({ id, data });
+            // Отказ — от предложения, которое клиент видит; отмене предложение не нужно.
+            if (order.needsAnswer) {
+              if (order.offerId) decline.mutate({ id, data: { ...data, offerId: order.offerId } });
+            } else cancel.mutate({ id, data });
           }} />
       ) : null}
 

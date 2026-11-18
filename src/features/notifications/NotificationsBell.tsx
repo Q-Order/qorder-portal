@@ -86,7 +86,7 @@ export function opensWithoutSubject(kind: string): boolean {
 }
 
 export function destinationOf(kind: string, draftId: string): string {
-  if (kind === 'NEW_ARRIVALS') return '/new-arrivals';
+  if (kind === 'NEW_ARRIVALS') return '/catalog?novelty=1';
   if (kind === 'PROMO_STARTED') return '/promotions';
   // Шаблон по расписанию уже разложен в корзину — клиенту остаётся проверить и отправить.
   if (kind === 'TEMPLATE_READY') return '/checkout';
