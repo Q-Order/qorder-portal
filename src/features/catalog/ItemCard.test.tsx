@@ -224,6 +224,9 @@ describe('карточка товара', () => {
     await userEvent.click(within(line).getByRole('button', { name: 'Показать все (4)' }));
     expect(line).toHaveTextContent('AZA01-BU');
     expect(within(line).getByRole('button', { name: 'Свернуть' })).toBeInTheDocument();
+    // Артикул другого цвета — ссылка на его карточку, открытый — не ссылка (2026-11-20).
+    expect(within(line).getByRole('link', { name: 'AZA01-BL' })).toHaveAttribute('href', '/catalog/b');
+    expect(within(line).queryByRole('link', { name: 'AZA01-M' })).toBeNull();
   });
 
   it('показывает характеристики рубрики выше прочих свойств', async () => {
@@ -404,17 +407,46 @@ describe('карточка товара', () => {
       const tiers = await screen.findAllByTestId('line-tier');
       // Каждый вариант — подписанными строками: штук всего, цена штуки, цена за все линейки, выгода; «Итого» в заголовке нет.
       expect(screen.getByTestId('line-tiers')).not.toHaveTextContent('Итого');
-      expect(tiers[0]).toHaveTextContent(/1 линейка.*Штук всего\s*6 шт.*Цена за 1 шт\s*10\s000.*−17% к рознице.*Цена за 1 линейку\s*60\s000/);
+      expect(tiers[0]).toHaveTextContent(/1 линейка.*Штук всего\s*6 шт.*Цена за 1 шт\s*10\s000.*Цена за 1 линейку\s*60\s000/);
       expect(tiers[1]).toHaveTextContent(/3 линейки.*18 шт \(3 × 6\).*Цена за 3 линейки\s*180\s000/);
       expect(tiers[1]).not.toHaveTextContent('Ваша выгода');
-      expect(tiers[2]).toHaveTextContent(/5 линеек.*30 шт \(5 × 6\).*9\s000.*−25% к рознице.*Цена за 5 линеек\s*270\s000.*Ваша выгода\s*30\s000/);
+      expect(tiers[2]).toHaveTextContent(/5 линеек.*30 шт \(5 × 6\).*9\s000.*Цена за 5 линеек\s*270\s000.*Ваша выгода\s*30\s000/);
       expect(screen.getByTestId('line-tiers')).toHaveTextContent('В одной линейке — 6 шт');
+      // Выгода к рознице — одной строкой над вариантами, с розничной ценой; в вариантах метки нет.
+      expect(screen.getByTestId('line-tiers-retail')).toHaveTextContent(/В розницу 12\s000 ₸ за шт — оптом дешевле до 25%/);
+      expect(tiers[0]).not.toHaveTextContent('к рознице');
       expect(tiers[0]).toHaveAttribute('aria-current', 'true');
       expect(screen.getByTestId('line-tiers-next')).toHaveTextContent(/Ещё 4 линейки — и будет 9\s000 ₸ за шт/);
 
       await userEvent.click(within(tiers[1]).getByRole('button'));
       expect(screen.getAllByTestId('line-tier')[1]).toHaveAttribute('aria-current', 'true');
       expect(screen.getByRole('button', { name: /В корзину линейкой/ })).toHaveTextContent(/180\s000/);
+    });
+
+    it('выгода к рознице — по вариантам, которые хватит остатка взять, и с округлением вниз', async () => {
+      // Розница 12 000; 1 и 3 линейки — по 10 000 за шт (16,7%), от 5 — 9 000 (25%), но свободно только 3 линейки.
+      const LINE_WHOLESALE = {
+        unit: 'линейка', packQty: 6, linePieces: 6, pieceUnit: 'шт', retail: true,
+        tiers: [{ from: 1, price: 60000 }, { from: 5, price: 54000 }],
+      };
+      const LINE = { pieces: 6, linePrice: 60000, piecePrice: 10000, availableLines: 3, sizes: [{ label: '48', quantity: 1, missing: false }] };
+      stubFetch(cardRules({ ...CARD, price: 12000, sizeGuide: 'CLOTHING', wholesale: LINE_WHOLESALE, line: LINE }));
+      renderCard();
+
+      await userEvent.click(await screen.findByRole('button', { name: /^Оптом/ }));
+      // Не «до 25%» за выключенный вариант и не «на 17%» округлением вверх.
+      expect(await screen.findByTestId('line-tiers-retail')).toHaveTextContent(/В розницу 12\s000 ₸ за шт — оптом дешевле на 16%\.$/);
+    });
+
+    it('ровная выгода к рознице не теряет процент при округлении вниз', async () => {
+      // Розница 10 000, линейка 6 шт — 54 000 (9 000 за шт): ровно 10%, а не 9% из-за 9,999…
+      const LINE_WHOLESALE = { unit: 'линейка', packQty: 6, linePieces: 6, pieceUnit: 'шт', retail: true, tiers: [{ from: 1, price: 54000 }] };
+      const LINE = { pieces: 6, linePrice: 54000, piecePrice: 9000, sizes: [{ label: '48', quantity: 1, missing: false }] };
+      stubFetch(cardRules({ ...CARD, price: 10000, sizeGuide: 'CLOTHING', wholesale: LINE_WHOLESALE, line: LINE }));
+      renderCard();
+
+      await userEvent.click(await screen.findByRole('button', { name: /^Оптом/ }));
+      expect(await screen.findByTestId('line-tiers-retail')).toHaveTextContent(/оптом дешевле на 10%\.$/);
     });
 
     it('одежда оптом: только полные линейки — нет полной линейки, «В корзину» выключена; варианты сверх наличия выключены', async () => {

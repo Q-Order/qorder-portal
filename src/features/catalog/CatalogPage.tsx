@@ -452,13 +452,13 @@ export function CatalogPage() {
           <h1 className="m-0 min-w-0 flex-1 truncate text-base font-extrabold tracking-[-0.01em] text-ink">{title}</h1>
           <PageHelp />
           {twoWays ? (
-            <div role="radiogroup" aria-label={t('catalog.orderMode.label')} className="flex shrink-0 gap-0.5 rounded-[0.625rem] bg-night p-0.5">
+            <div role="radiogroup" aria-label={t('catalog.orderMode.label')} className="flex shrink-0 gap-0.5 rounded-[0.625rem] border-[1.5px] border-line bg-surface p-0.5">
               {(['WHOLESALE', 'RETAIL'] as const).map((mode) => (
                 <button key={mode} type="button" role="radio" aria-checked={orderMode === mode} onClick={() => setOrderMode(mode)}
                   className={cn(
                     'qo-hit h-8 cursor-pointer rounded-lg border-0 px-2 text-caption font-extrabold',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                    orderMode === mode ? 'bg-surface text-ink' : 'bg-transparent text-night-sub',
+                    orderMode === mode ? 'bg-accent text-on-accent' : 'bg-transparent text-ink-muted',
                   )}>
                   {t(`catalog.orderMode.${mode}`)}
                 </button>
@@ -838,7 +838,7 @@ export function ItemTile({
           className="absolute right-2.5 top-2.5 rounded-full border-transparent bg-surface/90 shadow-soft backdrop-blur-sm"
         />
         {/* Внизу справа: верх занят наклейкой и сердечком, низ слева — метками. */}
-        <ColourCountBadge count={colour ? undefined : item.colorCount} className="absolute bottom-2.5 right-2.5" />
+        <ColourCountBadge count={colour || item.variants?.length ? undefined : item.colorCount} className="absolute bottom-2.5 right-2.5" />
       </div>
 
       <div className={cn('flex flex-1 flex-col', roomy ? 'gap-3 px-[1.125rem] pb-[1.125rem] pt-4' : 'gap-2 p-3')}>

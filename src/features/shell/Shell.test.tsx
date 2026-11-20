@@ -99,6 +99,37 @@ describe('оболочка кабинета', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'Цемент М400' })).toBeInTheDocument();
   });
 
+  it('смена цвета в карточке — тот же экран: без прыжка наверх и без проявления страницы (2026-11-20)', async () => {
+    const colour = (itemId: string, value: string) => ({
+      itemId, price: 2500, fields: [{ code: 'COLOR', name: 'Цвет', type: 'TEXT', value }],
+    });
+    const card = (id: string) => ({
+      id, name: 'Поло Club', unit: 'шт', price: 2500, vatRate: 12, stock: 'IN_STOCK',
+      media: [], attributes: [], favorite: false, rating: null, reviewCount: 0, canReview: false,
+      variants: [colour('item-1', 'Белый'), colour('item-2', 'Чёрный')],
+    });
+    stubFetch([
+      get('/api/portal/suppliers', [{ supplierId: 'supplier-1', name: 'СтройБаза Алматы', currency: 'KZT' }]),
+      get('/api/portal/notifications', []),
+      get('/api/portal/catalog/item-1', card('item-1')),
+      get('/api/portal/catalog/item-2', card('item-2')),
+      get('/api/portal/items/item-1/reviews', []),
+      get('/api/portal/items/item-2/reviews', []),
+      get('/api/portal/cart', emptyCart),
+    ]);
+    await renderShell({ route: '/catalog/item-1' });
+    await screen.findByRole('heading', { level: 1, name: 'Поло Club' });
+    const page = document.querySelector('.animate-page');
+    const scroll = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+
+    await userEvent.click(screen.getByRole('button', { name: 'Цвет: Чёрный' }));
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Цвет: Чёрный' })).toHaveAttribute('aria-pressed', 'true'));
+    expect(document.querySelector('.animate-page')).toBe(page);
+    expect(scroll).not.toHaveBeenCalled();
+    scroll.mockRestore();
+  });
+
   it('знак поставщика стоит в шапке рядом с именем; без знака — одно имя, без заглушки', async () => {
     stubWideScreen();
     stubFetch([

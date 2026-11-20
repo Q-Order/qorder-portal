@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { screen } from '@testing-library/react';
-import { DealPrice, ItemBadges, ItemFacts, inMode, isWholesaleDeal, saleChannel } from './itemParts';
+import { DealPrice, ItemBadges, ItemFacts, inMode, isWholesaleDeal, saleChannel, variantsIn } from './itemParts';
 import type { ShowcaseItemDto } from '../../api/generated';
 import { renderScreen } from '../../test/render';
 
@@ -110,5 +110,30 @@ describe('товар глазами выбранной заявки', () => {
     // Зачёркнутая при «вашей цене» — скидка клиента, а не распродажа: без процента акции.
     const discounted = { ...cement, yourPrice: true, wholesale: { ...wholesale, tiers: [{ from: 1, price: 1710, oldPrice: 1800 }] } };
     expect(inMode(discounted, 'WHOLESALE').discountPercent).toBeUndefined();
+  });
+});
+
+describe('цвета только выбранной заявки', () => {
+  const opt = { unit: 'уп', packQty: 10, pieceUnit: 'шт', retail: false, tiers: [{ from: 1, price: 100 }] };
+  const both = { ...opt, retail: true };
+  const variant = (itemId: string, channel?: 'RETAIL' | 'WHOLESALE' | 'BOTH') => ({ itemId, price: 1, fields: [], channel });
+  const item = {
+    id: 'own', wholesale: both,
+    variants: [variant('own', 'BOTH'), variant('retail', 'RETAIL'), variant('wholesale', 'WHOLESALE'), variant('both', 'BOTH')],
+  };
+  const ids = (mode: 'WHOLESALE' | 'RETAIL') => variantsIn(item, mode).variants.map((one) => one.itemId);
+
+  it('в «Оптом» нет розничных, в «В розницу» — оптовых', () => {
+    expect(ids('WHOLESALE')).toEqual(['own', 'wholesale', 'both']);
+    expect(ids('RETAIL')).toEqual(['own', 'retail', 'both']);
+  });
+
+  it('вариант без способа (сервер старше поля) не прячется', () => {
+    expect(variantsIn({ ...item, variants: [variant('own'), variant('old')] }, 'WHOLESALE').variants.map((one) => one.itemId))
+      .toEqual(['own', 'old']);
+  });
+
+  it('товар только оптом не слушает шапку', () => {
+    expect(variantsIn({ ...item, wholesale: opt }, 'RETAIL').variants.map((one) => one.itemId)).toEqual(['own', 'wholesale', 'both']);
   });
 });

@@ -1,20 +1,30 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import type { ShowcaseCardDto } from '../../api/generated';
-import { cn } from '../../ui/cn';
-import { axesOf, valuesOf } from './VariantPicker';
+import { axesOf, pickVariant, valuesOf } from './VariantPicker';
 
 const SHOWN = 3;
 
-/** Артикулы цветов модели по порядку цветов, открытый — первым; без повторов и пустых. */
-export function modelArticles(item: ShowcaseCardDto): string[] {
+/**
+ * Артикулы цветов модели по порядку цветов, открытый — первым; без повторов и пустых.
+ * У каждого — позиция, куда ведёт ссылка: тот же цвет с размером, как у открытой, — как нажатие на кружок цвета.
+ */
+export function modelArticles(item: ShowcaseCardDto): { article: string; itemId: string }[] {
   const variants = item.variants ?? [];
-  const colour = axesOf(variants).find((axis) => axis.colour);
+  const axes = axesOf(variants);
+  const colour = axes.find((axis) => axis.colour);
+  const current = variants.find((variant) => variant.itemId === item.id);
   const ordered = colour
-    ? colour.options.map((option) => variants.find((variant) => valuesOf(variant).get(colour.code)?.text === option && variant.article)?.article)
-    : variants.map((variant) => variant.article);
-  const all = [item.article, ...ordered].filter((article): article is string => !!article);
-  return [...new Set(all)];
+    ? colour.options.map((option) => {
+      const article = variants.find((variant) => valuesOf(variant).get(colour.code)?.text === option && variant.article)?.article;
+      const target = current ? pickVariant(variants, axes, current, colour, option) : undefined;
+      return { article, itemId: target?.itemId ?? item.id };
+    })
+    : variants.map((variant) => ({ article: variant.article, itemId: variant.itemId }));
+  const all = [{ article: item.article, itemId: item.id }, ...ordered]
+    .filter((entry): entry is { article: string; itemId: string } => !!entry.article);
+  return all.filter((entry, index) => all.findIndex((other) => other.article === entry.article) === index);
 }
 
 /**
@@ -31,11 +41,19 @@ export function ModelArticles({ item }: { item: ShowcaseCardDto }) {
   return (
     <p data-testid="model-articles" className="m-0 text-sm text-ink-subtle">
       {t('item.articles')}{' '}
-      {shown.map((article, index) => (
+      {shown.map(({ article, itemId }, index) => (
         <span key={article}>
           {index > 0 ? ', ' : ''}
-          {/* Код не рвётся на дефисе: «LOW-ELE-» на одной строке и «BEG» на другой читались двумя артикулами (QA 360px). */}
-          <span className={cn('whitespace-nowrap', article === item.article && 'font-semibold text-ink-muted')}>{article}</span>
+          {/* Код не рвётся на дефисе: «LOW-ELE-» на одной строке и «BEG» на другой читались двумя артикулами (QA 360px).
+              Артикул другого цвета — ссылкой на него, как кружок цвета (просьба владельца 2026-11-20). */}
+          {itemId === item.id ? (
+            <span aria-current="page" className="whitespace-nowrap font-semibold text-ink-muted">{article}</span>
+          ) : (
+            <Link to={`/catalog/${itemId}`} replace
+              className="whitespace-nowrap rounded-[4px] text-accent-ink underline decoration-dotted underline-offset-2 hover:decoration-solid focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+              {article}
+            </Link>
+          )}
         </span>
       ))}
       {articles.length > SHOWN ? (

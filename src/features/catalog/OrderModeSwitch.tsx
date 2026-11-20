@@ -78,18 +78,19 @@ export function HeaderOrderMode() {
   };
   if (!twoWays) return null;
   return (
-    <div role="radiogroup" aria-label={t('catalog.orderMode.label')} className="flex h-11 shrink-0 items-center gap-0.5 rounded-xl bg-sunk p-1">
+    <div role="radiogroup" aria-label={t('catalog.orderMode.label')} className="flex h-11 shrink-0 items-center gap-0.5 rounded-xl border-[1.5px] border-line bg-surface p-[3px]">
       {(['WHOLESALE', 'RETAIL'] as const).map((mode) => (
         <button key={mode} type="button" role="radio" aria-checked={orderMode === mode} onClick={() => setOrderMode(mode)}
           disabled={!!locked && locked !== mode}
           title={locked && locked !== mode ? t(`catalog.orderMode.only.${locked}`) : undefined}
           className={cn(
-            'qo-hit flex h-9 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 items-center gap-1.5 whitespace-nowrap rounded-lg border-0 px-3 text-sm font-bold',
+            'qo-hit flex h-9 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 items-center gap-1.5 whitespace-nowrap rounded-lg border-0 px-3 text-sm font-extrabold transition-colors duration-200',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-            orderMode === mode ? 'bg-surface font-extrabold text-ink shadow-[2px_3px_6px_rgba(58,48,30,.07)]' : 'bg-transparent text-ink-muted hover:text-ink',
+            // Выбранный — залит зелёным, как «Оптом / В розницу» в карточке: белое на сером путало клиентов (2026-11-20).
+            orderMode === mode ? 'bg-accent text-on-accent' : 'bg-transparent text-ink-muted hover:bg-sunk hover:text-ink',
           )}>
           {t(`catalog.orderMode.${mode}`)}
-          <span className="text-xs font-semibold tabular-nums text-ink-subtle">{number[mode]}</span>
+          <span className="text-xs font-semibold tabular-nums opacity-75">{number[mode]}</span>
         </button>
       ))}
     </div>

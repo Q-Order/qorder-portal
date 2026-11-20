@@ -3,7 +3,10 @@ import i18n from '../i18n';
 /**
  * Телефоны любой страны. Сервер хранит номер в E.164 цифрами: код страны
  * и номер подряд, «77010000102», «996555123456». Тот же список кодов —
- * у страницы входа Keycloak (`phone-login.js`) и в портале с админкой.
+ * у страницы входа Keycloak (`phone-login.js`).
+ *
+ * Файл один на три проекта: front, portal и admin держат одинаковые копии,
+ * `phoneCopies.test.ts` в каждом сверяет их побайтно. Правка — во всех трёх.
  */
 
 export interface Country {
@@ -80,10 +83,81 @@ export function countryOptions(language: string): (Country & { name: string })[]
       return null;
     }
   })();
-  const named = COUNTRIES.map((c) => ({ ...c, name: nameOf(c.iso, lang, names) }));
+  // Только +7 — Казахстан и Россия (решение владельца 2026-11-02): вход и все
+  // формы с номером (клиенты, сотрудники, каналы WhatsApp) — по номерам +7,
+  // как на странице входа. Полный список остаётся для показа чужих номеров.
+  const named = COUNTRIES.filter((c) => c.code === '7').map((c) => ({ ...c, name: nameOf(c.iso, lang, names) }));
   const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name, lang);
   return [
     ...named.filter((c) => CIS_COUNTRIES.includes(c.iso)).sort(byName),
     ...named.filter((c) => !CIS_COUNTRIES.includes(c.iso)).sort(byName),
   ];
+}
+
+/**
+ * Номер из телефонной книги цифрами с кодом страны. Записан он как угодно:
+ * «+996 555 12 34 56» — код уже есть; «8 701 …» и «701 …» без «+» — свой,
+ * казахстанский.
+ */
+export function phoneFromBook(raw: string): string {
+  const digits = raw.replace(/\D/g, '');
+  if (raw.trim().startsWith('+') || raw.trim().startsWith('00')) return digits.replace(/^00/, '');
+  if (digits.length === 11 && /^[78]/.test(digits)) return `7${digits.slice(1)}`;
+  if (digits.length === 10) return `7${digits}`;
+  return digits;
+}
+
+/**
+ * Почему набранное не принято: «8» в начале, чужой код, старый номер
+ * не +7 (из прежних данных — его вводят заново).
+ */
+export type Plus7Note = 'eight' | 'foreign' | 'legacy' | null;
+
+/**
+ * Номер +7 из набранного — как на странице входа (`phone-login.js`, take):
+ * десять цифр после кода. `prev` — цифры номера до этого ввода.
+ * `pending` — в поле пока только «+» (ждём 7) или «+7» (ждём номер).
+ *
+ * - «+7…» (набор или вставка) — свой код, после него цифры как есть:
+ *   «8» после «+7» — часть номера (Петербург 812, бесплатные 800).
+ * - «+» и другая цифра — чужой код, отказ.
+ * - `whole` (вставка, автозаполнение): 11 цифр с 7 или 8 в начале — код или
+ *   местная восьмёрка, срезаются; больше десяти иначе — чужой номер, отказ.
+ * - Набор: «8», поставленная в начало номера, который с неё не начинался, —
+ *   местная восьмёрка, не принимается. Номер на 8 (вставленный 800, 812)
+ *   правится как обычно. Лишняя цифра срезается в конце — первую резать
+ *   нельзя, все номера Казахстана начинаются с 7.
+ */
+export function takePlus7(
+  raw: string,
+  whole: boolean,
+  prev = '',
+  /** Ввод, а не стирание: при стирании первой цифры соседняя «8» не трогается. */
+  inserting = true,
+): { digits: string; note: Plus7Note; pending?: '+' | '+7' } {
+  const text = raw.trim();
+  if (text.startsWith('+')) {
+    const rest = text.slice(1).trimStart();
+    if (!rest) return { digits: '', note: null, pending: '+' };
+    if (!rest.startsWith('7')) return whole ? { digits: '', note: 'foreign' } : { digits: '', note: 'foreign', pending: '+' };
+    const digits = rest.slice(1).replace(/\D/g, '').slice(0, 10);
+    return !digits && !whole ? { digits, note: null, pending: '+7' } : { digits, note: null };
+  }
+  let digits = text.replace(/\D/g, '');
+  if (whole) {
+    if (digits.length === 11 && /^[78]/.test(digits)) digits = digits.slice(1);
+    else if (digits.length > 10) return { digits: '', note: 'foreign' };
+    return { digits, note: null };
+  }
+  // Номер на 8 правится как обычно; но одна «8» вместо всего номера (выделил
+  // всё и набрал) — снова местная восьмёрка.
+  if (inserting && digits.startsWith('8') && !(prev.startsWith('8') && digits.length > 1)) {
+    return { digits: digits.replace(/^8+/, '').slice(0, 10), note: 'eight' };
+  }
+  return { digits: digits.slice(0, 10), note: null };
+}
+
+/** «7011234567» → «701 123 45 67» — так номер диктуют и читают. */
+export function groupPlus7(digits: string): string {
+  return [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6, 8), digits.slice(8, 10)].filter(Boolean).join(' ');
 }

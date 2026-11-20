@@ -1820,7 +1820,8 @@
       "piecesLabel": "Pieces in total",
       "pieces": "{{pieces}} pcs",
       "pieceLabel": "Price per piece",
-      "belowRetail": "−{{percent}}% vs retail",
+      "retail": "Retail {{price}} per pc — wholesale is {{percent}}% cheaper.",
+      "retailUpTo": "Retail {{price}} per pc — wholesale is up to {{percent}}% cheaper.",
       "linesPrice_one": "Price for {{count}} size run",
       "linesPrice_other": "Price for {{count}} size runs",
       "savedLabel": "You save",
@@ -2857,5 +2858,15 @@
     "branch": "Branch: {{name}}",
     "branchHint": "Stock and prices are this branch's. Change your city in the profile.",
     "header": "Your city: {{name}}. Change it in the profile"
+  },
+  "phonePlus7": {
+    "eight": "Enter the number after +7, without 8",
+    "foreign": "Only +7 numbers",
+    "clear": "Clear number",
+    "legacy": "Not a +7 number — enter it again",
+    "short": "The number is incomplete: 10 digits after +7"
+  },
+  "phonePicker": {
+    "country": "Country"
   }
 }

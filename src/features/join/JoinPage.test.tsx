@@ -79,33 +79,29 @@ describe('страница поставщика', () => {
     const send = await screen.findByRole('button', { name: 'Отправить заявку' });
 
     await userEvent.type(screen.getByLabelText('Название компании'), 'ТОО Хлеб');
-    await userEvent.type(screen.getByLabelText('Телефон'), '8 701 612-22-05');
+    await userEvent.type(screen.getByLabelText('Телефон'), '7016122205');
     expect(send).toBeDisabled();
 
     await userEvent.click(screen.getByRole('checkbox'));
     expect(send).toBeEnabled();
   });
 
-  it('неполный номер не проходит: 8 и девять цифр', async () => {
+  it('неполный номер не проходит; вставленный «8 (701) …» становится номером +7', async () => {
     stubFetch([get('/api/portal/join/consent-notice', notice)]);
     open('/join');
     await screen.findByRole('button', { name: 'Отправить заявку' });
 
     const phone = screen.getByLabelText('Телефон');
     const fault = 'Номер из 10 цифр, начиная с 7, например 701 000 00 01 — можно с +7 или 8';
-    await userEvent.type(phone, '8701123456');
-    await userEvent.tab();
-    expect(screen.getByText(fault)).toBeInTheDocument();
-
-    // Лишняя цифра без «+7» не читается как код 7 и номер 011…
-    await userEvent.clear(phone);
-    await userEvent.type(phone, '70112345678');
+    await userEvent.type(phone, '701123456');
     await userEvent.tab();
     expect(screen.getByText(fault)).toBeInTheDocument();
 
     await userEvent.clear(phone);
-    await userEvent.type(phone, '8 (701) 123-45-67');
+    await userEvent.click(phone);
+    await userEvent.paste('8 (701) 123-45-67');
     await userEvent.tab();
+    expect(phone).toHaveValue('701 123 45 67');
     expect(screen.queryByText(fault)).not.toBeInTheDocument();
   });
 
@@ -114,7 +110,7 @@ describe('страница поставщика', () => {
     open('/join');
     const send = await screen.findByRole('button', { name: 'Отправить заявку' });
     await userEvent.type(screen.getByLabelText('Название компании'), 'ТОО Хлеб');
-    await userEvent.type(screen.getByLabelText('Телефон'), '8 701 612-22-05');
+    await userEvent.type(screen.getByLabelText('Телефон'), '7016122205');
     await userEvent.click(screen.getByRole('checkbox'));
     expect(send).toBeEnabled();
 
@@ -135,13 +131,13 @@ describe('страница поставщика', () => {
     await userEvent.click(screen.getByRole('button', { name: /Не получается\? Оставьте заявку/ }));
 
     await userEvent.type(screen.getByLabelText('Название компании'), 'ТОО Хлеб');
-    await userEvent.type(screen.getByLabelText('Телефон'), '+7 701 612 22 05');
+    await userEvent.type(screen.getByLabelText('Телефон'), '7016122205');
     await userEvent.click(screen.getByRole('checkbox'));
     await userEvent.click(screen.getByRole('button', { name: 'Отправить заявку' }));
 
     expect(await screen.findByText(/Спасибо! Свяжемся с вами/)).toBeInTheDocument();
     const body = JSON.parse(String(calls.find((call) => call.init?.method === 'POST')?.init?.body));
-    expect(body).toMatchObject({ code: 'abc', name: 'ТОО Хлеб', phone: '+7 701 612 22 05', consentVersion: '2026-10-20' });
+    expect(body).toMatchObject({ code: 'abc', name: 'ТОО Хлеб', phone: '77016122205', consentVersion: '2026-10-20' });
   });
 
   it('имя с разметкой выводится текстом', async () => {
@@ -179,13 +175,13 @@ describe('страница поставщика', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Я сотрудник, продавец/ }));
 
     await userEvent.type(screen.getByLabelText('Ваше имя'), 'Ерлан');
-    await userEvent.type(screen.getByLabelText('Ваш телефон'), '8 701 555 12 34');
+    await userEvent.type(screen.getByLabelText('Ваш телефон'), '7015551234');
     await userEvent.click(screen.getByRole('button', { name: 'Получить ссылку для владельца' }));
 
     expect(await screen.findByText('https://cab/join/owner/T1')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Отправить в WhatsApp' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Скопировать ссылку' })).toBeInTheDocument();
     const body = JSON.parse(String(calls.find((call) => call.init?.method === 'POST')?.init?.body));
-    expect(body).toEqual({ sellerName: 'Ерлан', sellerPhone: '8 701 555 12 34' });
+    expect(body).toEqual({ sellerName: 'Ерлан', sellerPhone: '77015551234' });
   });
 });

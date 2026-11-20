@@ -15,7 +15,7 @@ import {
   useSubmitSupplierLead,
 } from '../../api/generated';
 import { ConsentBlock, useConsent } from '../activation/Consent';
-import { KZ_PHONE } from './kzPhone';
+import { JoinPhone } from './JoinPhone';
 import { LanguageAsk } from '../language/LanguageAsk';
 import { LanguagePicker } from '../shell/LanguagePicker';
 import { ForwardToOwner } from './ForwardToOwner';
@@ -32,14 +32,11 @@ type Key = 'name' | 'binIin' | 'phone' | 'city';
 const FIELDS: { key: Key; label: string; inputMode?: 'numeric' | 'tel'; autoComplete?: string }[] = [
   { key: 'name', label: 'join.name', autoComplete: 'organization' },
   { key: 'binIin', label: 'join.bin', inputMode: 'numeric' },
-  { key: 'phone', label: 'join.phone', inputMode: 'tel', autoComplete: 'tel' },
+  { key: 'phone', label: 'join.phone' },
   { key: 'city', label: 'join.city', autoComplete: 'address-level2' },
 ];
 
-const SCHEMA = {
-  ...rules.SupplierLeadRequest,
-  phone: { ...rules.SupplierLeadRequest.phone, pattern: KZ_PHONE },
-};
+const SCHEMA = rules.SupplierLeadRequest;
 
 function failureKey(error: unknown): string {
   const code = (error as { info?: { code?: unknown } } | null)?.info?.code;
@@ -93,7 +90,7 @@ export function JoinPage() {
           code: code && !expired ? code : undefined,
           name: form.values.name.trim(),
           binIin: blank(form.values.binIin),
-          phone: form.values.phone.trim(),
+          phone: form.values.phone,
           city: blank(form.values.city),
           consentVersion: notice.version,
         },
@@ -171,7 +168,11 @@ export function JoinPage() {
           </p>
         ) : (
           <>
-            {FIELDS.map((field) => (
+            {FIELDS.map((field) => field.key === 'phone' ? (
+              <JoinPhone key={field.key} id={`${id}-${field.key}`} name={field.key} label={t(field.label)}
+                value={form.values.phone} fault={form.faults.phone}
+                onChange={form.field('phone').onChange} onBlur={form.field('phone').onBlur} />
+            ) : (
               <div key={field.key} className="flex flex-col gap-1.5">
                 <label htmlFor={`${id}-${field.key}`} className="text-sm font-medium text-ink">
                   {t(field.label)}

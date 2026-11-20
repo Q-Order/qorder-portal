@@ -1,5 +1,5 @@
 import { lineOf, linesIn, takenIn } from '../cart/cartPart';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PackContents, packMembers } from './PackContents';
 import { sizeRow } from './sizeSystem';
 import type { SizeGrid as ClothingGrid } from './sizeStandard';
@@ -45,7 +45,7 @@ import { COLOUR, VariantPicker, axesOf, colourOf, valuesOf } from './VariantPick
 import { SizeChartTable } from './SizeChartTable';
 import { StockNote } from './StockNote';
 import { ItemBadges, ItemFacts } from './CatalogPage';
-import { DealPrice, MarkBadge, RatingBadge, SaleChannelBadge, TINY_BADGE, WholesaleDealBadge, dealOf, inMode, isWholesaleDeal, PressNote, perPiece } from './itemParts';
+import { DealPrice, MarkBadge, RatingBadge, SaleChannelBadge, TINY_BADGE, WholesaleDealBadge, dealOf, inMode, isWholesaleDeal, PressNote, perPiece, variantsIn } from './itemParts';
 import type { ShowcaseCardDtoSizeGuide, ShowcaseItemDto, ShowcaseWholesaleDto } from '../../api/generated';
 import { ItemThumb } from './ItemThumb';
 import { dayMonth, decimal, money, shortDate } from '../../shared/format';
@@ -83,6 +83,10 @@ export function ItemCardPage() {
   const { itemId = '' } = useParams();
   const queryClient = useQueryClient();
   const card = useGetPortalCatalogItem(itemId, { query: { placeholderData: () => variantPreview(queryClient, itemId) } });
+  const [orderMode] = useOrderMode();
+  // Один и тот же объект, пока не сменились карточка или способ: иначе эффекты по `item.variants` шли на каждой перерисовке.
+  const data = card.data?.status === 200 ? card.data.data : undefined;
+  const item = useMemo(() => (data ? variantsIn(data, orderMode) : undefined), [data, orderMode]);
 
   if (card.isPending) {
     return (
@@ -112,7 +116,7 @@ export function ItemCardPage() {
 
   // Ключом позиции: выбор другого варианта открывает другую позицию, и набранное
   // количество с формой вопроса начинаются заново.
-  return <ItemCard key={card.data.data.id} item={card.data.data} />;
+  return <ItemCard key={card.data.data.id} item={item!} />;
 }
 
 /**
@@ -161,6 +165,12 @@ export function colourMedia(item: ShowcaseCardDto): ShowcaseCardDto['media'] {
 function ItemCard({ item }: { item: ShowcaseCardDto }) {
   const { t } = useTranslation();
   const { gallery, decision, beside } = useSpecBeside();
+  // Первое фото каждого цвета — заранее, пока смотрят карточку: иначе снимок качался только после нажатия
+  // на цвет, и на медленной связи смена цвета занимала около двух секунд (2026-11-20).
+  useEffect(() => {
+    new Set((item.variants ?? []).map((variant) => variant.media?.find((entry) => entry.kind === 'PHOTO')?.url))
+      .forEach((url) => { if (url) new Image().src = url; });
+  }, [item.variants]);
   const categories = useGetPortalCategories();
   const category = categories.data?.status === 200
     ? categories.data.data.find((entry) => entry.id === item.categoryId)
@@ -193,6 +203,7 @@ function ItemCard({ item }: { item: ShowcaseCardDto }) {
   const hasSpec = properties.length > 0 || !!item.description;
   // Метки отзыва о размере — только у товара, у которого размер есть.
   const hasSize = all.some((property) => /^(размер|size|өлшем)/i.test(property.name));
+  const mode = useSaleMode(item);
 
   return (
     <div className="flex flex-col gap-6 pb-40 lg:gap-11 lg:pb-0">
@@ -201,7 +212,9 @@ function ItemCard({ item }: { item: ShowcaseCardDto }) {
         рубрика › товар». Карточку открывают и по присланной ссылке, и тогда
         крошки — единственный ответ на вопрос, из какой она рубрики.
       */}
-      <nav aria-label={t('item.crumbs')} className="hidden flex-wrap items-center gap-1.5 text-sm text-ink-muted md:flex lg:-mb-5">
+      {/* «Оптом / В розницу» — на уровне крошек, справа (просьба владельца 2026-11-20); на телефоне крошек нет — один переключатель. */}
+      <div className={cn('flex items-center gap-4 lg:-mb-5', !mode.value && 'max-md:hidden')}>
+      <nav aria-label={t('item.crumbs')} className="hidden min-w-0 flex-1 flex-wrap items-center gap-1.5 text-sm text-ink-muted md:flex">
         <Link to="/home" className="hover:text-ink">{t('home.title')}</Link>
         <span aria-hidden="true">›</span>
         <Link to={category ? `/catalog?category=${encodeURIComponent(category.id)}` : '/catalog'} className="hover:text-ink">
@@ -210,6 +223,12 @@ function ItemCard({ item }: { item: ShowcaseCardDto }) {
         <span aria-hidden="true">›</span>
         <span aria-current="page" className="min-w-0 truncate font-bold text-ink">{item.name}</span>
       </nav>
+      {mode.value && item.wholesale ? (
+        <ModeSwitch value={mode.value} onChange={mode.change} className="w-full shrink-0 md:ml-auto md:w-64"
+          // И сразу к блоку о выбранном: цене штуки или условиям опта (2026-10-30) — когда он отрисуется.
+          onPick={(next) => setTimeout(() => showBlockOf(next))} />
+      ) : null}
+      </div>
 
       {/*
         Три части одной сеткой: снимки, решение и характеристики. На мониторе
@@ -315,13 +334,6 @@ function Decision({ item, categoryName }: { item: ShowcaseCardDto; categoryName?
   const priced = perPiece(view);
   // Одежда оптом — линейкой: размер не выбирают, состав линейки — описанием (решение владельца 2026-11-14).
   const line = (mode.value ?? only) === 'WHOLESALE' ? item.line : undefined;
-  // «В розницу» / «Оптом» — и сразу к блоку о выбранном: цене штуки или условиям опта (2026-10-30).
-  const scrollTo = useRef<SaleMode | null>(null);
-  useEffect(() => {
-    if (!mode.value || scrollTo.current !== mode.value) return;
-    scrollTo.current = null;
-    showBlockOf(mode.value);
-  }, [mode.value]);
 
   // Налог — отдельной мелкой строкой под ценой. «Цена на <дата>» убрана (просьба владельца 2026-11-06).
   const terms = item.vatRate != null
@@ -463,13 +475,6 @@ function Decision({ item, categoryName }: { item: ShowcaseCardDto; categoryName?
         и два второстепенных — вопрос продавцу и избранное.
       */}
       <div className="flex flex-col gap-[18px] md:rounded-[var(--radius-gallery)] md:bg-surface md:p-5 md:shadow-[0_0_0_1px_var(--color-hairline)]">
-        {mode.value && item.wholesale ? (
-          <ModeSwitch value={mode.value} onChange={mode.change}
-            // Тот же режим — блок уже на экране, к нему листаем сразу; другой — когда он отрисуется.
-            // Без цен под кнопками (просьба владельца 2026-11-06): в «В розницу» не видно ничего об опте,
-            // цена выбранного способа — крупно над переключателем, условия опта — блоком после «Оптом».
-            onPick={(next) => (next === mode.value ? showBlockOf(next) : (scrollTo.current = next))} />
-        ) : null}
         {(item.variants ?? []).length > 1 && (
           <VariantPicker
             itemId={item.id}
@@ -993,6 +998,14 @@ function LineTiers({ item, choices, chosen, onPick, maxLines }: {
   // Цена одна при любом числе линеек — так и сказать, чтобы три одинаковые цены не читались ошибкой.
   const flat = choices.every((choice) => choice.piece === base.piece);
   const perLine = base.lines > 0 ? base.pieces / base.lines : 0;
+  // Выгода к рознице — один раз над вариантами и с розничной ценой: метка в каждом варианте повторялась и не говорила, к чему −N%.
+  // Только по вариантам, которые хватит остатка взять: «до 25%» за серую кнопку было бы пустым обещанием.
+  // Вниз: выгода не больше настоящей — 29,6% это «на 29%», не «на 30%».
+  const reachable = choices.filter((choice) => maxLines == null || choice.lines <= maxLines);
+  const cheapest = Math.min(...reachable.map((choice) => choice.piece));
+  // Разница × 100 / розница, а не (1 − доля) × 100: дробная арифметика давала 9,999… и «на 9%» вместо 10%.
+  const percent = retail && reachable.length > 0 ? Math.floor(((retail - cheapest) * 100) / retail) : 0;
+  const samePiece = reachable.every((choice) => choice.piece === reachable[0]?.piece);
   return (
     <section data-testid="line-tiers" aria-labelledby="line-tiers-title"
       className="flex flex-col gap-2.5 rounded-[var(--radius-tile)] bg-sunk p-3.5">
@@ -1001,10 +1014,14 @@ function LineTiers({ item, choices, chosen, onPick, maxLines }: {
         {t('item.lineTiers.hint', { pieces: perLine })}
         {flat ? ` ${t('item.lineTiers.flat')}` : ''}
       </p>
+      {retail && percent > 0 ? (
+        <p data-testid="line-tiers-retail" className="-mt-1 text-caption font-semibold text-sale-ink">
+          {t(samePiece ? 'item.lineTiers.retail' : 'item.lineTiers.retailUpTo', { price: money(retail, currency), percent })}
+        </p>
+      ) : null}
       <ul aria-label={t('item.lineTiers.title')} className="m-0 flex list-none flex-col gap-2 p-0">
         {choices.map((choice) => {
           const on = choice.lines === chosen;
-          const percent = retail ? Math.round((1 - choice.piece / retail) * 100) : 0;
           // Выгода против первого варианта — та же покупка по цене первой ступени.
           const saved = base.piece * choice.pieces - choice.sum;
           // Подпись слева — одной строкой: на телефоне «Цена за 1 / шт» рвалась (замечание portal-1a 2026-11-14).
@@ -1038,12 +1055,6 @@ function LineTiers({ item, choices, chosen, onPick, maxLines }: {
                     <span className="text-ink-muted">{t('item.lineTiers.pieceLabel')}</span>
                     <span className="font-semibold text-ink">{money(choice.piece, currency)}</span>
                   </span>
-                  {/* Выгода против розницы — своей строкой под ценой: в строке цены на телефоне она рвалась и налезала. */}
-                  {percent > 0 ? (
-                    <span className="self-end whitespace-nowrap rounded-full bg-sale-soft px-2 text-caption font-bold text-sale-ink">
-                      {t('item.lineTiers.belowRetail', { percent })}
-                    </span>
-                  ) : null}
                   <span className={row}>
                     {/* «Цена за 3 линейки» — за все линейки варианта (просьба владельца 2026-11-14). */}
                     <span className="text-ink-muted">{t('item.lineTiers.linesPrice', { count: choice.lines })}</span>
@@ -1534,17 +1545,20 @@ function SpecPanel({
  * и пустота справа выходила бы больше, чем под снимками.
  * ponytail: порог на глаз; точнее — мерить саму панель в одну колонку.
  */
+/** Последняя раскладка карточки: другой цвет той же модели встаёт сразу так же, без перескока характеристик. */
+let lastBeside = false;
+
 function useSpecBeside() {
   const gallery = useRef<HTMLDivElement>(null);
   const decision = useRef<HTMLDivElement>(null);
-  const [beside, setBeside] = useState(false);
+  const [beside, setBeside] = useState(lastBeside);
   useEffect(() => {
     const left = gallery.current;
     const right = decision.current;
     if (!left || !right || typeof ResizeObserver === 'undefined') return;
     // Только на мониторе (`lg`): на телефоне части идут подряд, и колонка там не нужна.
     const wide = window.matchMedia('(min-width: 64rem)');
-    const measure = () => setBeside(wide.matches && right.offsetHeight - left.offsetHeight >= 400);
+    const measure = () => { lastBeside = wide.matches && right.offsetHeight - left.offsetHeight >= 400; setBeside(lastBeside); };
     const observer = new ResizeObserver(measure);
     observer.observe(left);
     observer.observe(right);

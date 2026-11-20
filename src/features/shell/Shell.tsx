@@ -165,9 +165,14 @@ export function Shell() {
   const home = location.pathname === '/home';
   // Переход в раздел — с самого верха (решение владельца 2026-10-30): иначе новый раздел открывался
   // на высоте прошлого. Назад браузером (POP) не трогаем; смена фильтров в адресе — тот же раздел.
+  // Смена цвета или артикула в карточке (REPLACE на другую карточку) — та же модель: прыжок наверх дёргал экран (2026-11-20).
+  const sameModel = navigation === 'REPLACE' && location.pathname.startsWith('/catalog/');
+  // Все карточки — один экран для анимации: иначе первая смена цвета после входа из каталога
+  // меняла ключ с адреса карточки на общий и мигала всей страницей. Сама карточка пересобирается по своему ключу.
+  const pageKey = location.pathname.startsWith('/catalog/') ? '/catalog/item' : location.pathname;
   useEffect(() => {
-    if (navigation !== 'POP') toTop();
-  }, [location.pathname, navigation]);
+    if (navigation !== 'POP' && !sameModel) toTop();
+  }, [location.pathname, navigation, sameModel]);
   const others = useOthersUnread();
   const { activated, ready } = useSupplierAccess();
   const { sections: mainSections } = useMainSections(ready);
@@ -409,12 +414,13 @@ export function Shell() {
             {/*
               Смена экрана видна движением: четверть секунды, проявление и
               полсантиметра снизу. Ключом служит адрес — иначе анимация отыграла
-              бы один раз за всё время работы кабинета. В ключе и магазин:
+              бы один раз за всё время работы кабинета. Смена цвета в карточке — не смена
+              экрана: без проявления, иначе каждый цвет мигал всей страницей (2026-11-20). В ключе и магазин:
               витрина другого магазина начинается заново — без прежней
               рубрики, отбора, порядка, страницы и слайда.
             */}
             <div
-              key={`${supplierId ?? ''}:${location.pathname}`}
+              key={`${supplierId ?? ''}:${pageKey}`}
               // Лента по центру — узкой колонкой в 900 точек, как в макете.
               className={cn('animate-page', wide && 'mx-auto max-w-[76rem]')}
             >

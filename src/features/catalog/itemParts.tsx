@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Package, ShoppingCart, Sparkles, Star, Tag, type IconComponent } from '../../ui/icons';
 import type { TFunction } from 'i18next';
 import { useNavigate } from 'react-router-dom';
-import type { ShowcaseItemDto } from '../../api/generated';
+import type { ShowcaseItemDto, ShowcaseVariantDto } from '../../api/generated';
 import { QuantityField } from '../cart/QuantityField';
 import { LineQuantity } from '../cart/LineQuantity';
 import { useAddToCart } from '../cart/ageGate';
@@ -371,6 +371,21 @@ export function PressNote({ press, className }: { press?: PressPrice; className?
 export function saleChannel(item: Partial<Pick<ShowcaseItemDto, 'wholesale'>>): 'retail' | 'wholesale' | 'both' {
   if (!item.wholesale) return 'retail';
   return item.wholesale.retail ? 'both' : 'wholesale';
+}
+
+/**
+ * Цвета и размеры — только выбранной заявки (просьба владельца 2026-11-20): в «Оптом» — варианты, которые
+ * продаются оптом, в «В розницу» — штуками. Товар одного способа живёт своим способом, а не шапкой.
+ * Сама позиция остаётся всегда — иначе выбор потерял бы выбранное.
+ */
+export function variantsIn<T extends Pick<ShowcaseItemDto, 'id' | 'wholesale'> & { variants?: ShowcaseVariantDto[] }>(
+  item: T, mode: SaleMode | undefined,
+): T {
+  const own = item.wholesale?.retail ? mode : item.wholesale ? 'WHOLESALE' : 'RETAIL';
+  // Способа нет (сервер старше поля) — вариант не прячем: лучше лишний цвет, чем пропавший.
+  const drop = own === 'WHOLESALE' ? 'RETAIL' : own === 'RETAIL' ? 'WHOLESALE' : undefined;
+  if (!drop || !item.variants) return item;
+  return { ...item, variants: item.variants.filter((variant) => variant.itemId === item.id || variant.channel !== drop) };
 }
 
 /** Пилюля канала продажи — нейтральная: это условие покупки, а не выгода. */

@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import type { ShowcaseItemDto } from '../../api/generated';
 import { axesOf, swatchOf, pickVariant, swatchesOf, valuesOf, type Axis } from './VariantPicker';
 import { cn } from '../../ui/cn';
+import { useOrderMode } from '../cart/orderMode';
+import { variantsIn } from './itemParts';
 
 /** Сколько значений показать, пока ширину плитки не измерить. */
 const VISIBLE = 5;
@@ -52,7 +54,8 @@ export function shownOptions(options: string[], widths: number[], more: number, 
 export function useTileVariant(item: ShowcaseItemDto) {
   const navigate = useNavigate();
   const [chosenId, setChosenId] = useState(item.id);
-  const variants = item.variants ?? [];
+  // Цвета только выбранной заявки: в «Оптом» нет розничных, в «В розницу» — оптовых (2026-11-20).
+  const variants = variantsIn(item, useOrderMode()[0]).variants ?? [];
   const axes = variants.length >= 2 ? axesOf(variants) : [];
   const axis = axes[0] as Axis | undefined;
   const chosen = variants.find((variant) => variant.itemId === chosenId)

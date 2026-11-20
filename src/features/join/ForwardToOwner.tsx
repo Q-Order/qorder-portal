@@ -7,17 +7,14 @@ import { useFormRules } from '../../ui/forms/useFormRules';
 import { rules } from '../../api/rules.generated';
 import { useForwardSupplierJoin } from '../../api/generated';
 import { whatsappHref } from '../referral/referralText';
-import { KZ_PHONE } from './kzPhone';
+import { JoinPhone } from './JoinPhone';
 
 const INPUT = cn(
   'h-14 rounded-[var(--radius-control)] border-2 border-field-line bg-surface px-4',
   'text-base text-ink outline-none focus:border-shop focus:ring-1 focus:ring-shop',
 );
 
-const SCHEMA = {
-  ...rules.ForwardReferralRequest,
-  sellerPhone: { ...rules.ForwardReferralRequest.sellerPhone, pattern: KZ_PHONE },
-};
+const SCHEMA = rules.ForwardReferralRequest;
 
 /**
  * Продавец, не владелец: компанию подключает владелец. Продавец получает ссылку владельцу
@@ -39,7 +36,7 @@ export function ForwardToOwner({ code, onBack }: { code: string; onBack: () => v
     try {
       const response = await forward.mutateAsync({
         code,
-        data: { sellerName: form.values.sellerName.trim(), sellerPhone: form.values.sellerPhone.trim() },
+        data: { sellerName: form.values.sellerName.trim(), sellerPhone: form.values.sellerPhone },
       });
       if (response.status === 200) setLink(response.data.link);
     } catch (error) {
@@ -58,10 +55,6 @@ export function ForwardToOwner({ code, onBack }: { code: string; onBack: () => v
     }
   }
 
-  const fields = [
-    { key: 'sellerName' as const, label: 'join.seller.name', autoComplete: 'name' },
-    { key: 'sellerPhone' as const, label: 'join.seller.phone', inputMode: 'tel' as const, autoComplete: 'tel' },
-  ];
 
   return (
     <div className="flex flex-col gap-4">
@@ -80,22 +73,22 @@ export function ForwardToOwner({ code, onBack }: { code: string; onBack: () => v
         </>
       ) : (
         <>
-          {fields.map((field) => (
-            <div key={field.key} className="flex flex-col gap-1.5">
-              <label htmlFor={`${id}-${field.key}`} className="text-sm font-medium text-ink">{t(field.label)}</label>
-              <input
-                id={`${id}-${field.key}`}
-                value={form.values[field.key]}
-                inputMode={field.inputMode}
-                autoComplete={field.autoComplete}
-                aria-invalid={form.faults[field.key] ? 'true' : 'false'}
-                onChange={(event) => form.field(field.key).onChange(event.currentTarget.value)}
-                onBlur={form.field(field.key).onBlur}
-                className={INPUT}
-              />
-              <FieldFaultText fault={form.faults[field.key]} name={field.key} />
-            </div>
-          ))}
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={`${id}-sellerName`} className="text-sm font-medium text-ink">{t('join.seller.name')}</label>
+            <input
+              id={`${id}-sellerName`}
+              value={form.values.sellerName}
+              autoComplete="name"
+              aria-invalid={form.faults.sellerName ? 'true' : 'false'}
+              onChange={(event) => form.field('sellerName').onChange(event.currentTarget.value)}
+              onBlur={form.field('sellerName').onBlur}
+              className={INPUT}
+            />
+            <FieldFaultText fault={form.faults.sellerName} name="sellerName" />
+          </div>
+          <JoinPhone id={`${id}-sellerPhone`} name="sellerPhone" label={t('join.seller.phone')}
+            value={form.values.sellerPhone} fault={form.faults.sellerPhone}
+                onChange={form.field('sellerPhone').onChange} onBlur={form.field('sellerPhone').onBlur} />
           {failed && (
             <p role="alert" className="rounded-[var(--radius-control)] border border-gone/30 bg-gone/8 px-3 py-2 text-sm text-ink">
               {t('join.seller.failed')}

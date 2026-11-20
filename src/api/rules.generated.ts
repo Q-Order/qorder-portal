@@ -31,8 +31,8 @@ export const rules = {
     address: { required: false, maxLength: 512, example: "Алматы, пр. Рыскулова 232/4" },
     city: { required: false, maxLength: 100, example: "Алматы" },
     contact: { required: false, maxLength: 128, example: "+7 727 000 00 00" },
-    phone: { required: false, maxLength: 32, example: "+7 701 000 00 01" },
-    whatsapp: { required: false, maxLength: 32, example: "+7 701 000 00 01" },
+    phone: { required: false, pattern: /^(?:7\d{10})$/, maxLength: 32, example: "+7 701 000 00 01" },
+    whatsapp: { required: false, pattern: /^(?:7\d{10})$/, maxLength: 32, example: "+7 701 000 00 01" },
     tagline: { required: false, maxLength: 64, example: "Магазин одежды" },
     logoUrl: { required: false, pattern: /^(?:^\s*$|^https:\/\/\S+$|^\/api\/files\/[0-9a-fA-F-]{36}$)$/, maxLength: 2048, example: "https://cdn.example.kz/stroybaza.png" },
     bankName: { required: false, maxLength: 255, example: "АО «Народный Банк Казахстана»" },
@@ -217,6 +217,7 @@ export const rules = {
     documentDate: { required: true },
     currency: { required: true },
     status: { required: true },
+    dueOn: { required: false },
   },
   ShipmentLineInput: {
     lineId: { required: true },
@@ -250,6 +251,16 @@ export const rules = {
     currency: { required: true },
     note: { required: false, maxLength: 500 },
   },
+  ClaimLineInput: {
+    lineId: { required: true },
+    kind: { required: true },
+  },
+  SaveClaimRequest: {
+    foundOn: { required: true },
+    status: { required: true },
+    settlement: { required: false },
+    note: { required: false, maxLength: 1000 },
+  },
   BatchPlaceInput: {
     placeId: { required: true },
   },
@@ -262,6 +273,9 @@ export const rules = {
     periodTo: { required: false },
     currency: { required: true },
     note: { required: false, maxLength: 500 },
+    expectedOn: { required: false },
+    arrivedOn: { required: false },
+    carrierPaidOn: { required: false },
   },
   PromoChannelDto: {
     saleTitle: { required: false, maxLength: 60 },
@@ -403,7 +417,7 @@ export const rules = {
   },
   CarrierRequest: {
     name: { required: true, maxLength: 255, example: "СДЭК" },
-    phone: { required: false, maxLength: 32, example: "+7 727 000 00 00" },
+    phone: { required: false, pattern: /^(?:7\d{10})$/, maxLength: 32, example: "+7 727 000 00 00" },
     trackingUrlTemplate: { required: false, pattern: /^(?:^https?:\/\/\S*\{number}\S*$)$/, maxLength: 512, example: "https://cdek.kz/track?n={number}" },
     terminalAddress: { required: false, maxLength: 512, example: "Алматы, Толе би 101" },
     note: { required: false, maxLength: 512, example: "Звонят за час до приезда" },
@@ -550,12 +564,12 @@ export const rules = {
 
   },
   CreateStaffRequest: {
-    phone: { required: true, pattern: /^(?:7\d{10}|[1-689]\d{7,14})$/, minLength: 1, example: "77010000105" },
+    phone: { required: true, pattern: /^(?:7\d{10})$/, minLength: 1, example: "77010000105" },
     name: { required: true, minLength: 1, example: "Асхат Каримов" },
     email: { required: true, minLength: 1, format: "email", example: "askhat@example.kz" },
   },
   CreateTenantAccountRequest: {
-    phone: { required: true, pattern: /^(?:7\d{10}|[1-689]\d{7,14})$/, minLength: 1, example: "77010000201" },
+    phone: { required: true, pattern: /^(?:7\d{10})$/, minLength: 1, example: "77010000201" },
     name: { required: true, minLength: 1, example: "Айгуль Сериковна" },
     email: { required: true, minLength: 1, format: "email", example: "aigul@example.kz" },
   },
@@ -578,7 +592,7 @@ export const rules = {
     feature: { required: false, maxLength: 32, example: "catalog" },
   },
   AddChannelRequest: {
-    phone: { required: true, pattern: /^(?:\d{10,15})$/, minLength: 1 },
+    phone: { required: true, pattern: /^(?:7\d{10})$/, minLength: 1 },
     displayName: { required: false, maxLength: 255 },
     purpose: { required: false, pattern: /^(?:FULL|CODES)$/, example: "CODES" },
   },
@@ -676,6 +690,7 @@ export const rules = {
   SavePaymentRequest: {
     paidOn: { required: true },
     note: { required: false, maxLength: 500 },
+    method: { required: false },
   },
   InvoiceImportRequest: {
 
@@ -727,6 +742,14 @@ export const rules = {
   AskAboutOrderRequest: {
     text: { required: true, maxLength: 2000, example: "Можно забрать завтра после шести?" },
   },
+  DeclineOfferRequest: {
+    offerId: { required: true },
+    reason: { required: false, example: "PRICE" },
+    comment: { required: false, maxLength: 500, example: "Нашёл дешевле" },
+  },
+  ConfirmOrderRequest: {
+    offerId: { required: true },
+  },
   DeclineOrderRequest: {
     reason: { required: false, example: "PRICE" },
     comment: { required: false, maxLength: 500, example: "Нашёл дешевле" },
@@ -743,13 +766,13 @@ export const rules = {
     code: { required: false, maxLength: 32 },
     name: { required: true, maxLength: 255, example: "ТОО \"Хлеб\"" },
     binIin: { required: false, pattern: /^(?:\d{12})$/, example: "123456789012" },
-    phone: { required: true, pattern: /^(?:\s*\+?[\s()\-]*(\d[\s()\-]*){8,15})$/, minLength: 1, example: "+7 701 612 22 05" },
+    phone: { required: true, pattern: /^(?:7\d{10})$/, minLength: 1, example: "+7 701 612 22 05" },
     city: { required: false, maxLength: 100, example: "Алматы" },
     consentVersion: { required: true, maxLength: 32, example: "2026-10-20" },
   },
   ForwardReferralRequest: {
     sellerName: { required: true, maxLength: 120, example: "Ерлан" },
-    sellerPhone: { required: true, pattern: /^(?:\s*\+?[\s()\-]*(\d[\s()\-]*){8,15})$/, minLength: 1, example: "+7 701 555 12 34" },
+    sellerPhone: { required: true, pattern: /^(?:7\d{10})$/, minLength: 1, example: "+7 701 555 12 34" },
   },
   StaffJoinPasswordRequest: {
     password: { required: true, minLength: 8, maxLength: 128 },
@@ -758,7 +781,7 @@ export const rules = {
     name: { required: true, maxLength: 255, example: "ТОО \"Хлеб\"" },
     binIin: { required: true, pattern: /^(?:\d{12})$/, minLength: 1, example: "123456789012" },
     ownerName: { required: true, maxLength: 255, example: "Асхат" },
-    phone: { required: true, pattern: /^(?:\s*\+?[\s()\-]*(\d[\s()\-]*){8,15})$/, minLength: 1, example: "+7 701 612 22 05" },
+    phone: { required: true, pattern: /^(?:7\d{10})$/, minLength: 1, example: "+7 701 612 22 05" },
     email: { required: true, maxLength: 255, format: "email", example: "owner@example.kz" },
     consentVersion: { required: true, maxLength: 32, example: "2026-10-20" },
     ownerToken: { required: false, maxLength: 64 },
@@ -769,7 +792,7 @@ export const rules = {
     password: { required: true, minLength: 8, maxLength: 128 },
   },
   AccessRequestRequest: {
-    phone: { required: false, pattern: /^(?:^\+?\d{10,15}$)$/, example: "77011234567" },
+    phone: { required: false, pattern: /^(?:7\d{10})$/, example: "77011234567" },
     companyName: { required: false, maxLength: 255, example: "ТОО Кафе" },
     bin: { required: false, pattern: /^(?:^\d{12}$)$/, example: "123456789013" },
     city: { required: false, maxLength: 255, example: "Астана" },
@@ -822,7 +845,7 @@ export const rules = {
     reason: { required: true, maxLength: 500, example: "перевод не пришёл" },
   },
   IssueInvitationRequest: {
-    phone: { required: true, pattern: /^(?:7\d{10}|[1-689]\d{7,14})$/, minLength: 1, example: "77010000001" },
+    phone: { required: true, pattern: /^(?:7\d{10})$/, minLength: 1, example: "77010000001" },
     email: { required: false, maxLength: 255, format: "email", example: "prorab@example.kz" },
     name: { required: false, maxLength: 255, example: "Асхат" },
   },
@@ -830,7 +853,7 @@ export const rules = {
     fromId: { required: true },
   },
   CreateManagerDraftRequest: {
-    phone: { required: false, pattern: /^(?:7\d{10}|[1-689]\d{7,14})$/, example: "77010000312" },
+    phone: { required: false, pattern: /^(?:7\d{10})$/, example: "77010000312" },
     name: { required: false, maxLength: 255, example: "Ерлан" },
     shop: { required: false, maxLength: 255, example: "Магазин «Береке»" },
     pickupPointId: { required: false },
@@ -978,13 +1001,5 @@ export const rules = {
   },
   HideDemandRequest: {
     text: { required: true, maxLength: 120, example: "ананас" },
-  },
-  ConfirmOrderRequest: {
-    offerId: { required: true },
-  },
-  DeclineOfferRequest: {
-    offerId: { required: true },
-    reason: { required: false, example: "PRICE" },
-    comment: { required: false, maxLength: 500, example: "Нашёл дешевле" },
   },
 } as const satisfies Record<string, Record<string, FieldRule>>;

@@ -1896,7 +1896,8 @@
       "piecesLabel": "Штук всего",
       "pieces": "{{pieces}} шт",
       "pieceLabel": "Цена за 1 шт",
-      "belowRetail": "−{{percent}}% к рознице",
+      "retail": "В розницу {{price}} за шт — оптом дешевле на {{percent}}%.",
+      "retailUpTo": "В розницу {{price}} за шт — оптом дешевле до {{percent}}%.",
       "linesPrice_one": "Цена за {{count}} линейку",
       "linesPrice_few": "Цена за {{count}} линейки",
       "linesPrice_many": "Цена за {{count}} линеек",
@@ -2945,5 +2946,15 @@
     "branch": "Филиал: {{name}}",
     "branchHint": "Наличие и цены — этого филиала. Город меняется в профиле.",
     "header": "Ваш город: {{name}}. Изменить в профиле"
+  },
+  "phonePlus7": {
+    "eight": "Номер вводится после +7, без 8",
+    "foreign": "Только номера +7",
+    "clear": "Стереть номер",
+    "legacy": "Номер не +7 — введите заново",
+    "short": "Номер неполный: после +7 нужно 10 цифр"
+  },
+  "phonePicker": {
+    "country": "Страна"
   }
 }
